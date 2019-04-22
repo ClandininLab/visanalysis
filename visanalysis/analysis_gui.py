@@ -5,14 +5,19 @@
 from PyQt5.QtWidgets import (QPushButton, QWidget, QGridLayout, QApplication,
                              QComboBox, QLabel, QFrame, QListWidget,
                              QListWidgetItem, QCheckBox, QLineEdit)
-
-
-from visanalysis import protocol_analysis as pa
+import PyQt5.QtCore as QtCore
 
 import sys
 
+from visanalysis import protocol_analysis as pa
+from visanalysis import imaging_data
+from visanalysis import region
+
+
 # TODO:flexible filtering window. For arbitrary params/metadata (param values, date, fly info etc etc)
 # TODO: select a series to do quick-view analysis
+# TODO: highlight seires w/o named roi, button to draw roi 
+
 class AnalysisGUI(QWidget):
     
     def __init__(self):
@@ -56,15 +61,16 @@ class AnalysisGUI(QWidget):
         self.grid.addWidget(self.n_label, 9, 1)
         
         # # filter results combobox for example cell # #
-        new_label = QLabel('Example series:')
-        self.grid.addWidget(new_label, 7, 0)
+        self.series_label = QLabel('Example series:')
+        self.grid.addWidget(self.series_label, 7, 0)
         self.example_combobox = QComboBox(self)
         self.grid.addWidget(self.example_combobox, 8, 0)
         
         # # filter results list # # 
-        new_label = QLabel('Population series:')
-        self.grid.addWidget(new_label, 9, 0)
+        self.pop_label = QLabel('Population series:')
+        self.grid.addWidget(self.pop_label, 9, 0)
         self.filter_results_list = QListWidget(self)
+        self.filter_results_list.itemClicked.connect(self.onClickedItem)
         self.grid.addWidget(self.filter_results_list, 10, 0)
         
         self.updateFilterResults()
@@ -79,16 +85,16 @@ class AnalysisGUI(QWidget):
         self.grid.addWidget(self.igor_export_checkbox, 5, 1)
         
         # # Button for example cell analysis # # 
-        example_analysis_button = QPushButton("Do example", self)
-        example_analysis_button.clicked.connect(self.doExampleAnalysis) 
-        example_analysis_button.setMaximumSize(150,100)
-        self.grid.addWidget(example_analysis_button, 6, 1)
+        self.example_analysis_button = QPushButton("Do example", self)
+        self.example_analysis_button.clicked.connect(self.doExampleAnalysis) 
+        self.example_analysis_button.setMaximumSize(150,100)
+        self.grid.addWidget(self.example_analysis_button, 6, 1)
 
         # # Button for population analysis # #
-        population_analysis_button = QPushButton("Do population", self)
-        population_analysis_button.clicked.connect(self.doPopulationAnalysis) 
-        population_analysis_button.setMaximumSize(150,100)
-        self.grid.addWidget(population_analysis_button, 7, 1)
+        self.population_analysis_button = QPushButton("Do population", self)
+        self.population_analysis_button.clicked.connect(self.doPopulationAnalysis) 
+        self.population_analysis_button.setMaximumSize(150,100)
+        self.grid.addWidget(self.population_analysis_button, 7, 1)
         
         self.setLayout(self.grid) 
         self.setGeometry(200, 200, 400, 600)
@@ -113,12 +119,24 @@ class AnalysisGUI(QWidget):
             
             #list
             item = QListWidgetItem(self.filter_results_list)
+            item.file_name = file_name
+            item.series_number = series_number
+            item.setToolTip('Click to define ROIs')
+            ImagingData = imaging_data.ImagingDataObject(file_name, series_number, quickload = True)
+            roisets = ImagingData.getAvailableROIsets()
+            if self.roi_set_name_box.text() not in roisets:
+                item.setBackground(QtCore.Qt.red)
             ch = QCheckBox(file_name + ',' + str(series_number))
             ch.setChecked(True) #Default to checked
             self.filter_results_list.setItemWidget(item, ch)
             
             #combobox
             self.example_combobox.addItem(file_name + ',' + str(series_number))
+            
+    def onClickedItem(self, list_item): #pick ROIs
+        ImagingData = imaging_data.ImagingDataObject(list_item.file_name, list_item.series_number)
+        ImagingData.loadImageSeries()
+        MRS = region.MultiROISelector(ImagingData, roiType = 'freehand', roiRadius = 2)
 
     def getSelectedSeries(self):
         self.selected_file_names = []

@@ -28,7 +28,8 @@ from visanalysis import plot_tools
 class ImagingDataObject():
     def __init__(self, file_name, series_number,
                  data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData',
-                 flystim_data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData/FlystimData'):
+                 flystim_data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData/FlystimData',
+                 quickload = False):
         
         self.file_name = file_name
         self.series_number = series_number
@@ -38,27 +39,28 @@ class ImagingDataObject():
             self.image_data_directory = data_directory
         self.flystim_data_directory = flystim_data_directory
 
-        # Image series is of the format: TSeries-YYYYMMDD-00n
-        self.image_series_name = 'TSeries-' + file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-        
-        # get metadata and photodiode timing from bruker xml files
-        self.response_timing = self.getAcquisitionTiming()
-        self.stimulus_timing = getEpochAndFrameTiming(self.image_data_directory, self.image_series_name, plot_trace_flag=False)
-        self.metadata = self.getPVMetadata()
-
-        # Get stimulus metadata data from Flystim hdf5 file
-        try:
-            self.epoch_parameters, self.run_parameters, self.notes = self.getEpochGroupMetadata()
+        if not quickload:
+            # Image series is of the format: TSeries-YYYYMMDD-00n
+            self.image_series_name = 'TSeries-' + file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
             
-            flystim_epochs = len(self.epoch_parameters)
-            presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
-            if not flystim_epochs == presented_epochs:
-                print('WARNING: metadata epochs do not equal presented epochs')
-        except:
-            print('Warning: no stimulus timing information loaded')
-        
-        
-        self.colors = sns.color_palette("deep",n_colors = 10)
+            # get metadata and photodiode timing from bruker xml files
+            self.response_timing = self.getAcquisitionTiming()
+            self.stimulus_timing = getEpochAndFrameTiming(self.image_data_directory, self.image_series_name, plot_trace_flag=False)
+            self.metadata = self.getPVMetadata()
+    
+            # Get stimulus metadata data from Flystim hdf5 file
+            try:
+                self.epoch_parameters, self.run_parameters, self.notes = self.getEpochGroupMetadata()
+                
+                flystim_epochs = len(self.epoch_parameters)
+                presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
+                if not flystim_epochs == presented_epochs:
+                    print('WARNING: metadata epochs do not equal presented epochs')
+            except:
+                print('Warning: no stimulus timing information loaded')
+            
+            
+            self.colors = sns.color_palette("deep",n_colors = 10)
 # %%
     def loadImageSeries(self):
         # Load image series

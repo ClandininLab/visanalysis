@@ -54,14 +54,14 @@ class MultiROISelector(QWidget):
             self.grid.addWidget(newPlotWidget, tt, 6, 1, 5)
 
         # Clear all ROIs button
-        clearROIsButton = QPushButton("Clear ROIs", self)
-        clearROIsButton.clicked.connect(self.onPressedClearRoisButton) 
-        self.grid.addWidget(clearROIsButton, 10, 0)
+        self.clearROIsButton = QPushButton("Clear ROIs", self)
+        self.clearROIsButton.clicked.connect(self.onPressedClearRoisButton) 
+        self.grid.addWidget(self.clearROIsButton, 10, 0)
         
         # Save ROIs button
-        saveROIsButton = QPushButton("Save ROIs", self)
-        saveROIsButton.clicked.connect(self.onPressedSaveRoisButton) 
-        self.grid.addWidget(saveROIsButton, 10, 1)
+        self.saveROIsButton = QPushButton("Save ROIs", self)
+        self.saveROIsButton.clicked.connect(self.onPressedSaveRoisButton) 
+        self.grid.addWidget(self.saveROIsButton, 10, 1)
         
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
@@ -76,9 +76,9 @@ class MultiROISelector(QWidget):
         self.grid.addWidget(self.RoiComboBox, 9, 2)
         
         # Load ROIs button
-        loadROIsButton = QPushButton("Load ROI set", self)
-        loadROIsButton.clicked.connect(self.onPressedLoadRoisButton) 
-        self.grid.addWidget(loadROIsButton, 10, 2)
+        self.loadROIsButton = QPushButton("Load ROI set", self)
+        self.loadROIsButton.clicked.connect(self.onPressedLoadRoisButton) 
+        self.grid.addWidget(self.loadROIsButton, 10, 2)
 
         self.setLayout(self.grid) 
         self.setGeometry(100, 100, 1200, 200)

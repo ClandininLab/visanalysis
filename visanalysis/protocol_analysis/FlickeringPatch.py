@@ -56,9 +56,3 @@ class FlickeringPatchAnalysis(pa.ProtocolAnalysis.BaseAnalysis):
                 plot_tools.makeIgorStructure(new_ax, file_name = 'FP_trace_' + str(int(f)) + name_suffix, subdirectory = 'LC_RFs')
                 
         fig_handle.canvas.draw()
-        
-    def doAnalysis(self, eg_trace_ind = 0, export_to_igor_flag = False):
-        self.makeExamplePlots(eg_trace_ind = eg_trace_ind, export_to_igor_flag = export_to_igor_flag)
-        
-    def doOnlineAnalysis(self,fig_handle = None):
-        self.makeExamplePlots(fig_handle = fig_handle, eg_trace_ind = 0)

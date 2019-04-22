@@ -159,6 +159,17 @@ class BaseAnalysis():
         self.ImagingData = ImagingData
         self.initializeAnalysis() #Initialize the subclass analysis
         self.makeExamplePlots(fig_handle = fig_handle, eg_trace_ind = 0, export_to_igor_flag = False)
+        
+    # # Overwrite these methods in the analysis subclass # #
+    def makeExamplePlots(self, fig_handle = None, export_to_igor_flag = False, eg_trace_ind = 0):
+        print('No subclass method defined for makeExamplePlots')
+        
+    def getSummaryStatistics(self):
+        print('No subclass method defined for getSummaryStatistics')
+        
+    def makePopulationPlots(self, summary_statistics):
+        print('No subclass method defined for makePopulationPlots')
+        
 
 # =============================================================================
 # DATA PROCESSING FUNCTIONS FOR SORTING AND ORGANIZING RESPONSES
