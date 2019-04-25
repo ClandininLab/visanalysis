@@ -9,8 +9,10 @@ import matplotlib.colors as mcolors
 import h5py
 import os
 import datetime
+import inspect
+import yaml
 
-
+import visanalysis
 
 def addLine(ax, x, y, line_name = '', color = 'k', linestyle = '-', marker = 'None'):
     ax.plot(x, y, linestyle=linestyle, marker = marker,
@@ -47,12 +49,17 @@ def addScaleBars(axis, dT, dF, T_value = -0.1, F_value = -0.4):
         axis.plot(T_value * np.ones((2)),np.array([F_value, F_value + dF]),'k-',alpha=0.9)
         axis.plot(np.array([T_value, dT + T_value]), F_value * np.ones((2)), 'k-',alpha=0.9)
 
-def makeIgorStructure(ax, file_name = None, subdirectory = '',
-                      base_directory = 'C:\\Users\\mhturner\\Dropbox\\ClandininLab\\Analysis\\Igor'):
+def makeIgorStructure(ax, file_name = None, subdirectory = ''):
+    
+    # Import configuration settings
+    path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
+    with open(path_to_config_file, 'r') as ymlfile:
+        cfg = yaml.load(ymlfile)
+    
     if file_name == None:
         file_name = datetime.datetime.now().isoformat()
     axis_structure = getAxisStructure(ax)
-    file_path = os.path.join(base_directory, subdirectory, file_name + '.h5')
+    file_path = os.path.join(cfg['igor_directory'], subdirectory, file_name + '.h5')
     if os.path.isfile(file_path):
         os.remove(file_path)
         print('Overwriting existing figure file')

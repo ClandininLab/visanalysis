@@ -17,9 +17,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from cycler import cycler
 import glob
+import os
 import h5py
+import inspect
+import yaml
 
-from visanalysis import plot_tools
+import visanalysis
 from visanalysis import imaging_data
 
 
@@ -35,7 +38,12 @@ class BaseAnalysis():
         self.export_to_igor_flag = False
         self.igor_export_directory = 'LC_RFs'
         
-        self.flystim_data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData/FlystimData/'
+        # Import configuration settings
+        path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
+        with open(path_to_config_file, 'r') as ymlfile:
+            cfg = yaml.load(ymlfile)
+        
+        self.flystim_data_directory = cfg['flystim_data_directory']
         self.getAvailableFileNames()
         
 # =============================================================================
@@ -45,7 +53,7 @@ class BaseAnalysis():
         ""
         
         ""
-        fileNames = glob.glob(self.flystim_data_directory+"*.hdf5")
+        fileNames = glob.glob(os.path.join(self.flystim_data_directory,"*.hdf5"))
         self.all_series = []
         for ind, fn in enumerate(fileNames): #get all series
             dataFile = h5py.File(fn, 'r')
@@ -54,7 +62,7 @@ class BaseAnalysis():
 
             for er in epoch_run_keys:
                 newSeries = {'series_number':int(er),
-                             'file_name':fn.split('\\')[-1].split('.')[0]}
+                             'file_name':os.path.split(fn)[-1].split('.')[0]}
                 current_run = dataFile.get('epoch_runs')[er]
                 # Pull out run parameters
                 for a in current_run.attrs:
@@ -111,7 +119,7 @@ class BaseAnalysis():
             name_suffix = self.ImagingData.getAxisStructureNameSuffix()
             for ah in fig_handle.get_axes(): 
                 if hasattr(ah, 'igor_name'):
-                    plot_tools.makeIgorStructure(ah, file_name = ah.igor_name + name_suffix, subdirectory = self.igor_export_directory)
+                    visanalysis.plot_tools.makeIgorStructure(ah, file_name = ah.igor_name + name_suffix, subdirectory = self.igor_export_directory)
         
         self.ImagingData.generateRoiMap(scale_bar_length = 20)
         
@@ -151,7 +159,7 @@ class BaseAnalysis():
         if export_to_igor_flag:
             name_suffix = self.ImagingData.getAxisStructureNameSuffix()
             for ah in fig_handle.get_axes(): 
-                plot_tools.makeIgorStructure(ah, file_name = ah.igor_name + name_suffix, subdirectory = self.igor_export_directory)
+                visanalysis.plot_tools.makeIgorStructure(ah, file_name = ah.igor_name + name_suffix, subdirectory = self.igor_export_directory)
         
         plt.show()
 

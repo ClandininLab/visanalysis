@@ -20,24 +20,26 @@ from matplotlib import path
 import matplotlib.patches as patches
 import seaborn as sns
 import scipy.signal as signal
+import inspect
+import yaml
 
+import visanalysis
 from visanalysis import protocol_analysis as pa
-from visanalysis import plot_tools
-
 
 class ImagingDataObject():
-    def __init__(self, file_name, series_number,
-                 data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData',
-                 flystim_data_directory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData/FlystimData',
-                 quickload = False):
+    def __init__(self, file_name, series_number, quickload = False):
+        # Import configuration settings
+        path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
+        with open(path_to_config_file, 'r') as ymlfile:
+            cfg = yaml.load(ymlfile)
         
         self.file_name = file_name
         self.series_number = series_number
-        if os.path.isdir(os.path.join(data_directory, file_name.replace('-',''))): #sub-dirs for expt days
-            self.image_data_directory = os.path.join(data_directory, file_name.replace('-',''))
+        if os.path.isdir(os.path.join(cfg['data_directory'], file_name.replace('-',''))): #sub-dirs for expt days
+            self.image_data_directory = os.path.join(cfg['data_directory'], file_name.replace('-',''))
         else:
-            self.image_data_directory = data_directory
-        self.flystim_data_directory = flystim_data_directory
+            self.image_data_directory = cfg['data_directory']
+        self.flystim_data_directory = cfg['flystim_data_directory']
 
         if not quickload:
             # Image series is of the format: TSeries-YYYYMMDD-00n
@@ -166,7 +168,7 @@ class ImagingDataObject():
     #Methods for image generation:
     ##############################################################################
     def generateRoiMap(self, scale_bar_length = 0):
-        newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask, 0.5, self.colors)
+        newImage = visanalysis.plot_tools.overlayImage(self.roi_image, self.roi_mask, 0.5, self.colors)
         
         fh = plt.figure(figsize=(4,4))
         ax = fh.add_subplot(111)
@@ -175,7 +177,7 @@ class ImagingDataObject():
         ax.set_axis_off()
         if scale_bar_length > 0:
             microns_per_pixel = float(self.metadata['micronsPerPixel_XAxis'])
-            plot_tools.addImageScaleBar(ax, newImage, scale_bar_length, microns_per_pixel, 'lr')
+            visanalysis.plot_tools.addImageScaleBar(ax, newImage, scale_bar_length, microns_per_pixel, 'lr')
 
     # TODO: do this by epoch response rather than entire, raw trace
     def getVoxelCorrelationHeatMap(self, roi_response = None):

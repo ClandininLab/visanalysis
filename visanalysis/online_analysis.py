@@ -8,13 +8,13 @@ import matplotlib.pyplot as plt
 import imaging_data
 import os
 from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
-import socket
-import protocol_analysis as pa
-
-
 import sys
 from PyQt5.QtWidgets import (QPushButton, QWidget, QGridLayout, QApplication, QComboBox, QToolBar)
+import inspect
+import yaml
 
+import visanalysis
+from visanalysis import protocol_analysis as pa
 
 class OnlineAnalysisGUI(QWidget):
 
@@ -24,13 +24,15 @@ class OnlineAnalysisGUI(QWidget):
         self.fastZStackFlag = False
         self.rawSeries = None
         self.registeredSeries = None
-        if socket.gethostname() == "MHT-laptop": # (laptop, for dev.)
-            self.dataDirectory = '/Users/mhturner/Dropbox/ClandininLab/CurrentData/'
-            self.flyStimDataDirectory = self.dataDirectory + 'FlystimData/'
-        else: #TODO: specify hostname for bruker computer
-            self.dataDirectory = 'E:/Max/ForTransfer/'
-            self.flyStimDataDirectory = 'E:/Max/FlystimData/'
         
+        # Import configuration settings
+        path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
+        with open(path_to_config_file, 'r') as ymlfile:
+            cfg = yaml.load(ymlfile)
+
+        self.flyStimDataDirectory = cfg['flystim_data_directory']
+        self.dataDirectory = cfg['data_directory']
+
         # get flystim data files in the flyStimDataDirectory
         dataFolderContents = os.listdir(self.flyStimDataDirectory)
         self.flystimDataFileNames = [s for s in dataFolderContents if "hdf5" in s]
@@ -100,9 +102,7 @@ class OnlineAnalysisGUI(QWidget):
             series_number = int(self.seriesString.split('-')[-1])
             dateStr = self.seriesString.split('-')[1]
             file_name = dateStr[:4] + '-' + dateStr[4:6] + '-' + dateStr[6:]
-            self.ImagingData = imaging_data.ImagingDataObject(file_name, series_number, 
-                                       data_directory = self.dataDirectory, 
-                                       flystim_data_directory = self.flyStimDataDirectory)
+            self.ImagingData = imaging_data.ImagingDataObject(file_name, series_number)
             self.ImagingData.loadImageSeries()
 
     def onPressedButton(self):
@@ -135,7 +135,7 @@ class OnlineAnalysisGUI(QWidget):
         self.grid.addWidget(self.ts_comboBox, 2, 0)
 
     def updateImageDirectory(self):
-        self.imageDirectory = self.dataDirectory + self.flystimFileName.replace('-','') + '/'
+        self.imageDirectory = os.path.join(self.dataDirectory, self.flystimFileName.replace('-',''))
         
         
 class LassoROI:
