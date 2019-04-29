@@ -123,15 +123,18 @@ class ImagingDataObject():
                 del current_roi_group["roi_mask"]
             if current_roi_group.get("roi_response"):
                 del current_roi_group["roi_response"]
-            if current_roi_group.get("path_vertices"):
-                del current_roi_group["path_vertices"]
             if current_roi_group.get("roi_image"):
                 del current_roi_group["roi_image"]
                 
+            for dataset_key in current_roi_group.keys():
+                if 'path_vertices' in dataset_key:
+                    del current_roi_group[dataset_key]
+                  
             current_roi_group.create_dataset("roi_mask", data = self.roi_mask)
             current_roi_group.create_dataset("roi_response", data = self.roi_response)
-            current_roi_group.create_dataset("path_vertices", data = [x.vertices for x in self.roi_path])
             current_roi_group.create_dataset("roi_image", data = self.roi_image)
+            for p_ind, p in enumerate(self.roi_path):
+                current_roi_group.create_dataset("path_vertices_" + str(p_ind), data = p.vertices)
  
     def loadRois(self, roi_set_name):
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
@@ -139,8 +142,15 @@ class ImagingDataObject():
 
             self.roi_mask = list(roi_set_group.get("roi_mask")[:]) #load from hdf5 metadata file
             self.roi_response = list(roi_set_group.get("roi_response")[:])
-            self.roi_path = [path.Path(x) for x in list(roi_set_group.get("path_vertices")[:])]
             self.roi_image = roi_set_group.get("roi_image")[:]
+            
+            self.roi_path = []
+            new_path = roi_set_group.get("path_vertices_0")[:]
+            ind = 0
+            while new_path is not None:
+                self.roi_path.append(new_path)
+                ind += 1
+                new_path = roi_set_group.get("path_vertices_" + str(ind))
 
         self.getResponseTraces()
         
