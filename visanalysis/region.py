@@ -58,6 +58,15 @@ class MultiROISelector(QWidget):
         self.clearROIsButton.clicked.connect(self.onPressedClearRoisButton) 
         self.grid.addWidget(self.clearROIsButton, 10, 0)
         
+        # ROI type drop-down
+        self.RoiTypeComboBox = QComboBox(self)
+        self.RoiTypeComboBox.addItem("freehand")
+        radii = [1, 2, 3, 4, 6, 8]
+        for radius in radii:
+            self.RoiTypeComboBox.addItem("circle:"+str(radius))
+        self.RoiTypeComboBox.activated.connect(self.onSelectedRoiType)
+        self.grid.addWidget(self.RoiTypeComboBox, 9, 0)
+        
         # Save ROIs button
         self.saveROIsButton = QPushButton("Save ROIs", self)
         self.saveROIsButton.clicked.connect(self.onPressedSaveRoisButton) 
@@ -83,6 +92,9 @@ class MultiROISelector(QWidget):
         self.setLayout(self.grid) 
         self.setGeometry(100, 100, 1200, 200)
         self.setWindowTitle('Multi-ROI selector')    
+        
+        self.redrawRoiTraces()
+        
         self.show()
 
     def getNewROI(self,indices):
@@ -140,6 +152,14 @@ class MultiROISelector(QWidget):
         # Update figures
         self.redrawRoiTraces()
         
+    def onSelectedRoiType(self):
+        self.roiType = self.RoiTypeComboBox.currentText().split(':')[0]
+        if 'circle' in self.RoiTypeComboBox.currentText():
+            self.roiRadius = int(self.RoiTypeComboBox.currentText().split(':')[1])
+        else:
+            self.roiRadius = None
+        self.redrawRoiTraces()
+        
     def onPressedDeleteButton(self):
         roiIndex = int(self.sender().text().split('_')[1])
         self.ImagingData.roi_mask.pop(roiIndex)
@@ -147,7 +167,6 @@ class MultiROISelector(QWidget):
         self.ImagingData.roi_path.pop(roiIndex)
         self.redrawRoiTraces()
         
-
     def onPressedClearRoisButton(self):
         self.ImagingData.roi_mask = []
         self.ImagingData.roi_response = []
@@ -155,13 +174,14 @@ class MultiROISelector(QWidget):
         for roiIndex in range(self.maxRois):
             self.plotWidgets[roiIndex].clear()
             
-        self.refreshLassoWidget(self.ImagingData.roi_image)
+        self.redrawRoiTraces()
         
     def onPressedSaveRoisButton(self):
         self.ImagingData.saveRois(roi_set_name = self.le_roiSetName.text())
 
     def onPressedLoadRoisButton(self):
         self.ImagingData.loadRois(str(self.RoiComboBox.currentText()))
+        
         self.redrawRoiTraces()
 
     def redrawRoiTraces(self):
@@ -170,8 +190,11 @@ class MultiROISelector(QWidget):
             if roiIndex < len(self.ImagingData.roi_response):
                 penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[roiIndex]]))
                 self.plotWidgets[roiIndex].plot(np.squeeze(self.ImagingData.roi_response[roiIndex].T), pen=penStyle )
-                
-        newImage = plot_tools.overlayImage(self.ImagingData.roi_image, self.ImagingData.roi_mask , 0.5, self.colors)
+        
+        if len(self.ImagingData.roi_mask) > 0:
+            newImage = plot_tools.overlayImage(self.ImagingData.roi_image, self.ImagingData.roi_mask , 0.5, self.colors)
+        else:
+            newImage = self.ImagingData.roi_image
         self.refreshLassoWidget(newImage)
         self.show()
  
@@ -191,9 +214,9 @@ class MultiROISelector(QWidget):
         pixY = np.arange(self.ImagingData.roi_image.shape[0])
         yv, xv = np.meshgrid(pixX, pixY)
         self.pix = np.vstack((yv.flatten(), xv.flatten())).T
-        if self.roiType is 'circle':
+        if self.roiType == 'circle':
             self.lasso = EllipseSelector(ax1, self.onselectEllipse)
-        elif self.roiType is 'freehand':
+        elif self.roiType == 'freehand':
             self.lasso = LassoSelector(ax1, self.onselectFreehand)
         else:
             print('Warning ROI type not recognized. Choose circle or freehand')

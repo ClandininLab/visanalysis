@@ -151,9 +151,9 @@ class ImagingDataObject():
                 self.roi_path.append(new_path)
                 ind += 1
                 new_path = roi_set_group.get("path_vertices_" + str(ind))
-
+                
         self.getResponseTraces()
-        
+
     def filterResponseTraces(self, window_size = 5):
         for ind, rr in enumerate(self.roi_response):
             self.roi_response[ind] = np.expand_dims(signal.medfilt(np.squeeze(rr), window_size),0)
