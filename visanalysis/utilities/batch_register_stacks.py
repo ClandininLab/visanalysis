@@ -28,8 +28,8 @@ def main():
         series_number = int(re.split('-|\.',file_name)[-2])
         tmp_str = re.split('-', file_name)[1]
         fn = ''.join([tmp_str[0:4],'-',tmp_str[4:6],'-',tmp_str[6:8]])
-        ImagingData = imaging_data.ImagingDataObject(fn, series_number,
-                                                     data_directory = file_directory)
+        ImagingData = imaging_data.ImagingDataObject(fn, series_number)
+        ImagingData.loadImageSeries()
         
         ImagingData.registerStack()
         save_path = os.path.join(file_directory, file_name.split('.')[0] + '_reg' + '.tif')
