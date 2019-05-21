@@ -41,7 +41,7 @@ class BaseAnalysis():
         # Import configuration settings
         path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
         with open(path_to_config_file, 'r') as ymlfile:
-            cfg = yaml.load(ymlfile)
+            cfg = yaml.full_load(ymlfile)
         
         self.flystim_data_directory = cfg['flystim_data_directory']
         self.getAvailableFileNames()

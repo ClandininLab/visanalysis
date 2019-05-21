@@ -31,7 +31,7 @@ class ImagingDataObject():
         # Import configuration settings
         path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
         with open(path_to_config_file, 'r') as ymlfile:
-            cfg = yaml.load(ymlfile)
+            cfg = yaml.full_load(ymlfile)
         
         self.file_name = file_name
         self.series_number = series_number
