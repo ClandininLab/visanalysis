@@ -183,68 +183,6 @@ class BaseAnalysis():
 # DATA PROCESSING FUNCTIONS FOR SORTING AND ORGANIZING RESPONSES
 # =============================================================================
 #TODO: clean up var names etc
-def getEpochResponseMatrix(ImagingData):
-    """
-    getEpochReponseMatrix(ImagingData)
-        Takes in long stack response traces and splits them up into each stimulus epoch
-    
-    Args:
-        ImagingData object from imaging_data.ImagingDataObject
-
-    Returns:
-        time_vector (ndarray): in seconds. Time points of each frame acquisition within each epoch
-        response_matrix (ndarray): response for each roi in each epoch.
-            shape = (num rois, num epochs, num frames per epoch)
-    """
-    roi_response = np.vstack(ImagingData.roi_response)
-    
-    stimulus_start_times = ImagingData.stimulus_timing['stimulus_start_times'] #msec
-    stimulus_end_times = ImagingData.stimulus_timing['stimulus_end_times'] #msec
-    pre_time = ImagingData.run_parameters['pre_time'] * 1e3 #sec -> msec
-    tail_time = ImagingData.run_parameters['tail_time'] * 1e3 #sec -> msec
-    epoch_start_times = stimulus_start_times - pre_time
-    epoch_end_times = stimulus_end_times +  tail_time
-
-    sample_period = ImagingData.response_timing['sample_period'] #msec
-    stack_times = ImagingData.response_timing['stack_times'] #msec
-
-    # Use measured stimulus lengths for stim time instead of epoch param
-    # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
-    epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #msec
-    
-    # find how many acquisition frames correspond to pre, stim, tail time
-    epoch_frames = int(epoch_time / sample_period) #in acquisition frames
-    pre_frames = int(pre_time / sample_period) #in acquisition frames
-    time_vector = np.arange(0,epoch_frames) * sample_period / 1e3 # msec -> sec
-    
-    no_trials = len(epoch_start_times)
-    no_rois = roi_response.shape[0]
-    response_matrix = np.empty(shape=(no_rois, no_trials, epoch_frames), dtype=float)
-    response_matrix[:] = np.nan
-    cut_inds = np.empty(0, dtype = int)
-    for idx, val in enumerate(epoch_start_times):
-        stack_inds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
-        if len(stack_inds) == 0: #no imaging acquisitions happened during this epoch presentation
-            cut_inds = np.append(cut_inds,idx)
-            continue
-        if np.any(stack_inds > roi_response.shape[1]):
-            cut_inds = np.append(cut_inds,idx)
-            continue
-        if idx is not 0:
-            if len(stack_inds) < epoch_frames: #missed images for the end of the stimulus
-                cut_inds = np.append(cut_inds,idx)
-                continue
-        #pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
-        new_resp_chunk = roi_response[:,stack_inds]
-
-        # calculate baseline using pre frames
-        baseline = np.mean(new_resp_chunk[:,0:pre_frames], axis = 1, keepdims = True)
-        # to dF/F
-        new_resp_chunk = (new_resp_chunk - baseline) / baseline;
-        response_matrix[:,idx,:] = new_resp_chunk[:,0:epoch_frames]
-        
-    response_matrix = np.delete(response_matrix,cut_inds, axis = 1)
-    return time_vector, response_matrix
 
 def getEpochResponseHyperstack(ImagingData):
     """

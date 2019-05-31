@@ -7,16 +7,13 @@ Created on Tue Jul 17 14:15:33 2018
 
 """
 import skimage.io as io
-import xml.etree.ElementTree as ET
 from registration import CrossCorr
 import numpy as np
 import os
 import h5py
 from operator import itemgetter
 import pylab
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import path
 import matplotlib.patches as patches
 import seaborn as sns
 import scipy.signal as signal
@@ -24,10 +21,9 @@ import inspect
 import yaml
 
 import visanalysis
-from visanalysis import protocol_analysis as pa
 
 class ImagingDataObject():
-    def __init__(self, file_name, series_number, quickload = False):
+    def __init__(self, file_name, series_number):
         # Import configuration settings
         path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
         with open(path_to_config_file, 'r') as ymlfile:
@@ -40,29 +36,17 @@ class ImagingDataObject():
         else:
             self.image_data_directory = cfg['data_directory']
         self.flystim_data_directory = cfg['flystim_data_directory']
+        
+         # Get stimulus metadata from Flystim hdf5 file
+        self.epoch_parameters, self.run_parameters, self.notes = self.getEpochGroupMetadata()
 
-        if not quickload:
-            # Image series is of the format: TSeries-YYYYMMDD-00n
-            self.image_series_name = 'TSeries-' + file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-            
-            # get metadata and photodiode timing from bruker xml files
-            self.response_timing = self.getAcquisitionTiming()
-            self.stimulus_timing = getEpochAndFrameTiming(self.image_data_directory, self.image_series_name, plot_trace_flag=False)
-            self.metadata = self.getPVMetadata()
-    
-            # Get stimulus metadata data from Flystim hdf5 file
-            try:
-                self.epoch_parameters, self.run_parameters, self.notes = self.getEpochGroupMetadata()
-                
-                flystim_epochs = len(self.epoch_parameters)
-                presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
-                if not flystim_epochs == presented_epochs:
-                    print('WARNING: metadata epochs do not equal presented epochs')
-            except:
-                print('Warning: no stimulus timing information loaded')
-            
-            
-            self.colors = sns.color_palette("deep",n_colors = 10)
+    def checkEpochNumberCount(self):          
+        flystim_epochs = len(self.epoch_parameters)
+        presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
+        if not flystim_epochs == presented_epochs:
+            print('WARNING: metadata epochs do not equal presented epochs')
+          
+        self.colors = sns.color_palette("deep",n_colors = 10)
 # %%
     def loadImageSeries(self):
         # Load image series
@@ -107,6 +91,7 @@ class ImagingDataObject():
 
         self.current_series = self.registered_series
 
+                    
 # %% 
     ##############################################################################
     #Methods for handling roi saving/loading and generating roi responses:
@@ -162,7 +147,7 @@ class ImagingDataObject():
         if roi_response is not None:
             self.roi_response = roi_response # input roi response, e.g. online analysis
 
-        self.time_vector, self.response_matrix = pa.ProtocolAnalysis.getEpochResponseMatrix(self)   
+        self.time_vector, self.response_matrix = self.getEpochResponseMatrix()   
 
     def getAvailableROIsets(self):
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r+') as experiment_file:
@@ -172,6 +157,70 @@ class ImagingDataObject():
                 roi_set_names.append(roi_set)
         
         return roi_set_names
+    
+    
+    
+# %%
+    def getEpochResponseMatrix(self, respose_trace = None):
+        """
+        getEpochReponseMatrix(self, roi_response = None)
+            Takes in long stack response traces and splits them up into each stimulus epoch
+
+        Returns:
+            time_vector (ndarray): in seconds. Time points of each frame acquisition within each epoch
+            response_matrix (ndarray): response for each roi in each epoch.
+                shape = (num rois, num epochs, num frames per epoch)
+        """
+        if respose_trace is None:
+            respose_trace = np.vstack(self.roi_response)
+        
+        stimulus_start_times = self.stimulus_timing['stimulus_start_times'] #sec
+        stimulus_end_times = self.stimulus_timing['stimulus_end_times'] #sec
+        pre_time = self.run_parameters['pre_time'] #sec
+        tail_time = self.run_parameters['tail_time'] #sec
+        epoch_start_times = stimulus_start_times - pre_time
+        epoch_end_times = stimulus_end_times +  tail_time
+    
+        sample_period = self.response_timing['sample_period'] #sec
+        stack_times = self.response_timing['stack_times'] #sec
+    
+        # Use measured stimulus lengths for stim time instead of epoch param
+        # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
+        epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #sec
+        
+        # find how many acquisition frames correspond to pre, stim, tail time
+        epoch_frames = int(epoch_time / sample_period) #in acquisition frames
+        pre_frames = int(pre_time / sample_period) #in acquisition frames
+        time_vector = np.arange(0,epoch_frames) * sample_period # sec
+        
+        no_trials = len(epoch_start_times)
+        no_rois = respose_trace.shape[0]
+        response_matrix = np.empty(shape=(no_rois, no_trials, epoch_frames), dtype=float)
+        response_matrix[:] = np.nan
+        cut_inds = np.empty(0, dtype = int)
+        for idx, val in enumerate(epoch_start_times):
+            stack_inds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
+            if len(stack_inds) == 0: #no imaging acquisitions happened during this epoch presentation
+                cut_inds = np.append(cut_inds,idx)
+                continue
+            if np.any(stack_inds > respose_trace.shape[1]):
+                cut_inds = np.append(cut_inds,idx)
+                continue
+            if idx is not 0:
+                if len(stack_inds) < epoch_frames: #missed images for the end of the stimulus
+                    cut_inds = np.append(cut_inds,idx)
+                    continue
+            #pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
+            new_resp_chunk = respose_trace[:,stack_inds]
+    
+            # calculate baseline using pre frames
+            baseline = np.mean(new_resp_chunk[:,0:pre_frames], axis = 1, keepdims = True)
+            # to dF/F
+            new_resp_chunk = (new_resp_chunk - baseline) / baseline;
+            response_matrix[:,idx,:] = new_resp_chunk[:,0:epoch_frames]
+            
+        response_matrix = np.delete(response_matrix,cut_inds, axis = 1)
+        return time_vector, response_matrix
 
 # %% 
     ##############################################################################
@@ -254,48 +303,11 @@ class ImagingDataObject():
         fig_handle = plt.figure(figsize=(4.5,3.25))
         ax_handle = fig_handle.add_subplot(111)
         ax_handle.plot(self.time_vector, self.response_matrix[roi_ind,:,:].T)
-    
-# %% 
-    #####################################################################
-    #Functions for extracting timing information from Bruker data
-    #####################################################################
-    
-    def getAcquisitionTiming(self): #from bruker metadata (xml) file 
-        """
-        
-        Bruker imaging acquisition is based on the bruker metadata file (xml)
 
-        """
-
-        metaData = ET.parse(os.path.join(self.image_data_directory, self.image_series_name) + '.xml')
-            
-        # Get acquisition times from imaging metadata
-        root = metaData.getroot()
-        stack_times = []
-        frame_times = []
-
-        # Single-plane, xy time series
-        for child in root.find('Sequence').getchildren():
-            frTime = child.get('relativeTime')
-            if frTime is not None:
-                stack_times.append(float(frTime))        
-        stack_times = np.array(stack_times)
-        stack_times = stack_times[1:] #trim extra 0 at start
-        frame_times = stack_times
-            
-        stack_times = stack_times * 1e3 # -> msec
-        frame_times = frame_times * 1e3 # -> msec
-        sample_period = np.mean(np.diff(stack_times)) # in msec
-        return {'stack_times':stack_times, 'frame_times':frame_times, 'sample_period':sample_period }
-  
 # %%         
-    ####################################################################################
-    #Functions for reading stimulus metadata from flystim data file(s) and bruker XML
-    ####################################################################################
-        
     def getEpochGroupMetadata(self):
         """
-        
+        For reading stimulus metadata from flystim data file
         """
 
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
@@ -312,6 +324,8 @@ class ImagingDataObject():
                 # Collapse all levels of epoch parameters into a single dict
                 if epoch == 'rois':
                     continue
+                elif epoch == 'pois':
+                    continue
                 else:
                     new_epoch_params = addAttributesToDictionary(series_group[epoch],{}) #epoch_time is the only attribute at this level
                     new_epoch_params = addAttributesToDictionary(series_group[epoch + '/epoch_parameters'], new_epoch_params)
@@ -323,105 +337,53 @@ class ImagingDataObject():
             
         return epoch_parameters, run_parameters, notes
     
-    def getPVMetadata(self):
-        metaData = ET.parse(os.path.join(self.image_data_directory, self.image_series_name) + '.xml')
-        root = metaData.getroot()
-
-        metadata = {}
-        for child in list(root.find('PVStateShard')):
-            if child.get('value') is None:
-                for subchild in list(child):
-                    new_key = child.get('key') + '_' + subchild.get('index')
-                    new_value = subchild.get('value')
-                    metadata[new_key] = new_value
+# %%
+    def getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate,
+                               plot_trace_flag = True,
+                               threshold = 0.6, 
+                               minimum_epoch_separation = 2e3, # datapoints
+                               frame_slop = 10, #datapoints +/- ideal frame duration
+                               command_frame_rate = 115):
         
-            else:
-                new_key = child.get('key')
-                new_value = child.get('value')
-                metadata[new_key] = new_value
+        # shift & normalize so frame monitor trace lives on [0 1]
+        frame_monitor = frame_monitor - np.min(frame_monitor)
+        frame_monitor = frame_monitor / np.max(frame_monitor)
         
+        # find lightcrafter frame flip times
+        V_orig = frame_monitor[0:-2]
+        V_shift = frame_monitor[1:-1]
+        ups = np.where(np.logical_and(V_orig < threshold, V_shift >= threshold))[0] + 1
+        downs = np.where(np.logical_and(V_orig >= threshold, V_shift < threshold))[0] + 1
+        frame_times = np.sort(np.append(ups,downs))
         
-        metadata['version'] = root.get('version')
-        metadata['date'] = root.get('date')
-        metadata['notes'] = root.get('notes')
-
-        return metadata
-
-def getEpochAndFrameTiming(image_data_directory, image_series_name, 
-                           plot_trace_flag = True,
-                           threshold = 0.6, 
-                           minimum_epoch_separation = 2e3, # datapoints
-                           frame_slop = 10, #datapoints +/- ideal frame duration
-                           command_frame_rate = 115, #Hz
-                           v_rec_suffix = '_Cycle00001_VoltageRecording_001'):
-    
-    """
-    Stimulus (epoch) timing is based on the frame monitor trace, which is saved out as a 
-        .csv file with each image series. Assumes a frame monitor signal that flips from 
-        0 to 1 every other frame of a presentation and is 0 between epochs.
-
-    """
-
-    #photodiode metadata:
-    metadata = ET.parse(os.path.join(image_data_directory, image_series_name) + v_rec_suffix + '.xml')
-    root = metadata.getroot()
-    rate_node = root.find('Experiment').find('Rate')
-    sample_rate = int(rate_node.text)
-    
-    active_channels = []
-    signal_list = root.find('Experiment').find('SignalList').getchildren()
-    for signal_node in signal_list:
-        is_channel_active = signal_node.find('Enabled').text
-        channel_name = signal_node.find('Name').text
-        if is_channel_active == 'true':
-            active_channels.append(channel_name)
-
-    # Load frame tracker signal and pull frame/epoch timing info
-    data_frame = pd.read_csv(os.path.join(image_data_directory, image_series_name) + v_rec_suffix + '.csv');
-    
-    tt = data_frame.loc[:]['Time(ms)']
-    #for now takes first enabled channel. 
-    #TODO: Change to handle multiple photodiode signals
-    frame_monitor = data_frame.loc[:][' ' + active_channels[0]]
-    # shift & normalize so frame monitor trace lives on [0 1]
-    frame_monitor = frame_monitor - np.min(frame_monitor)
-    frame_monitor = frame_monitor / np.max(frame_monitor)
-    
-    # find lightcrafter frame flip times
-    V_orig = frame_monitor.iloc[0:-2]
-    V_shift = frame_monitor.iloc[1:-1]
-    ups = np.where(np.logical_and(V_orig.values < threshold, V_shift.values >= threshold))[0] + 1
-    downs = np.where(np.logical_and(V_orig.values >= threshold, V_shift.values < threshold))[0] + 1
-    frame_times = np.sort(np.append(ups,downs))
-    
-    # Use frame flip times to find stimulus start times
-    stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
-    stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
-    stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate * 1e3 # datapoints -> msec
-    stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate * 1e3 # datapoints -> msec
-    
-    # Find dropped frames and calculate frame rate
-    interval_duration = np.diff(frame_times)
-    frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
-    ideal_frame_len = 1 / command_frame_rate  * sample_rate #datapoints
-    dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
-    if len(dropped_frame_inds)>0:
-        print('Warning! Dropped ' + str(len(dropped_frame_inds)) + ' frame(s)')
-    good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)<frame_slop)[0]
-    measured_frame_len = np.mean(frame_len[good_frame_inds]) #datapoints
-    frame_rate = 1 / (measured_frame_len / sample_rate) #Hz
-    
-    if plot_trace_flag:
-        pylab.plot(tt,frame_monitor)
-        pylab.plot(tt.iloc[frame_times],threshold * np.ones(frame_times.shape),'ko')
-        pylab.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
-        pylab.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
-        pylab.plot(frame_times[dropped_frame_inds] / sample_rate * 1e3, 1 * np.ones(dropped_frame_inds.shape),'ro')
-        pylab.show
-    
-    return {'frame_times':frame_times, 'stimulus_end_times':stimulus_end_times,
-            'stimulus_start_times':stimulus_start_times, 'dropped_frame_inds':dropped_frame_inds,
-            'frame_rate':frame_rate}
+        # Use frame flip times to find stimulus start times
+        stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
+        stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
+        stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
+        stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
+        
+        # Find dropped frames and calculate frame rate
+        interval_duration = np.diff(frame_times)
+        frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
+        ideal_frame_len = 1 / command_frame_rate  * sample_rate #datapoints
+        dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
+        if len(dropped_frame_inds)>0:
+            print('Warning! Dropped ' + str(len(dropped_frame_inds)) + ' frame(s)')
+        good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)<frame_slop)[0]
+        measured_frame_len = np.mean(frame_len[good_frame_inds]) #datapoints
+        frame_rate = 1 / (measured_frame_len / sample_rate) #Hz
+        
+        if plot_trace_flag:
+            pylab.plot(time_vector,frame_monitor)
+            pylab.plot(time_vector[frame_times],threshold * np.ones(frame_times.shape),'ko')
+            pylab.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
+            pylab.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
+            pylab.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
+            pylab.show
+        
+        return {'frame_times':frame_times, 'stimulus_end_times':stimulus_end_times,
+                'stimulus_start_times':stimulus_start_times, 'dropped_frame_inds':dropped_frame_inds,
+                'frame_rate':frame_rate}
 
 
 def addAttributesToDictionary(group_object, dictionary, verbose = False):
