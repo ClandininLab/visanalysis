@@ -58,9 +58,9 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
             poi_group = experiment_file['/epoch_runs'].get(str(self.series_number)).get('pois')
             
             self.roi = {}
-            #Get dark point trace, if it exists
-            if poi_group.get('dark'):
-                dark_number = poi_group.get('dark').get('poi_numbers')[:]
+            #Get background point trace, if it exists
+            if poi_group.get('background'):
+                dark_number = poi_group.get('background').get('poi_numbers')[:]
                 dark_trace = self.poi_data['poi_data_matrix'][dark_number,:]
             else:
                 dark_trace = 0

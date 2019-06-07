@@ -343,8 +343,12 @@ class ImagingDataObject():
                                threshold = 0.6, 
                                minimum_epoch_separation = 2e3, # datapoints
                                frame_slop = 10, #datapoints +/- ideal frame duration
-                               command_frame_rate = 115):
+                               command_frame_rate = 120):
         
+        # Low-pass filter frame_monitor trace
+        b, a = signal.butter(4, 10*command_frame_rate, btype = 'low', fs = 1e4)
+        frame_monitor = signal.filtfilt(b, a, frame_monitor)
+
         # shift & normalize so frame monitor trace lives on [0 1]
         frame_monitor = frame_monitor - np.min(frame_monitor)
         frame_monitor = frame_monitor / np.max(frame_monitor)
