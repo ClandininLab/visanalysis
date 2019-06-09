@@ -9,6 +9,7 @@ import os
 import numpy as np
 
 
+
 from visanalysis import imaging_data
 
 class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
@@ -47,7 +48,7 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
     def getStimulusTiming(self):
         #get stimulus timing info from photodiode
         sample_rate = 1e4
-        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate)
+        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = True)
         
     def getEpochResponses(self):
         """
@@ -64,7 +65,7 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
                 dark_trace = self.poi_data['poi_data_matrix'][dark_number,:]
             else:
                 dark_trace = 0
-            
+                            
             for gr in poi_group:
                 new_roi = {}
                 if type(poi_group.get(gr)) is h5py._hl.group.Group:

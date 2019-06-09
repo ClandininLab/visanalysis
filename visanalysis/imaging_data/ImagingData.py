@@ -346,7 +346,7 @@ class ImagingDataObject():
                                command_frame_rate = 120):
         
         # Low-pass filter frame_monitor trace
-        b, a = signal.butter(4, 10*command_frame_rate, btype = 'low', fs = 1e4)
+        b, a = signal.butter(4, 10*command_frame_rate, btype = 'low', fs = sample_rate)
         frame_monitor = signal.filtfilt(b, a, frame_monitor)
 
         # shift & normalize so frame monitor trace lives on [0 1]
