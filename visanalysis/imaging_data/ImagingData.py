@@ -143,12 +143,6 @@ class ImagingDataObject():
     def filterResponseTraces(self, window_size = 5):
         for ind, rr in enumerate(self.roi_response):
             self.roi_response[ind] = np.expand_dims(signal.medfilt(np.squeeze(rr), window_size),0)
-  
-    def getResponseTraces(self, roi_response = None):
-        if roi_response is not None:
-            self.roi_response = roi_response # input roi response, e.g. online analysis
-
-        self.time_vector, self.response_matrix = self.getEpochResponseMatrix()   
 
     def getAvailableROIsets(self):
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r+') as experiment_file:
@@ -223,53 +217,7 @@ class ImagingDataObject():
         response_matrix = np.delete(response_matrix,cut_inds, axis = 1)
         return time_vector, response_matrix
 
-# %% 
-    ##############################################################################
-    #Methods for image generation:
-    ##############################################################################
-    def generateRoiMap(self, scale_bar_length = 0):
-        newImage = visanalysis.plot_tools.overlayImage(self.roi_image, self.roi_mask, 0.5, self.colors)
-        
-        fh = plt.figure(figsize=(4,4))
-        ax = fh.add_subplot(111)
-        ax.imshow(newImage)
-        ax.set_aspect('equal')
-        ax.set_axis_off()
-        if scale_bar_length > 0:
-            microns_per_pixel = float(self.metadata['micronsPerPixel_XAxis'])
-            visanalysis.plot_tools.addImageScaleBar(ax, newImage, scale_bar_length, microns_per_pixel, 'lr')
 
-    # TODO: do this by epoch response rather than entire, raw trace
-    def getVoxelCorrelationHeatMap(self, roi_response = None):
-        self.getResponseTraces()
-        if roi_response is None:
-            mean_roi_response = self.roi_response[0]
-        else:
-            mean_roi_response = roi_response
-        
-        x_dim = self.current_series.shape[1]
-        y_dim = self.current_series.shape[2]
-        
-        self.heat_map =  np.empty(shape=(x_dim, y_dim), dtype=float)
-        self.heat_map[:] = np.nan
-
-        xx, yy = (vec.flatten() for vec in np.meshgrid(np.arange(0,x_dim), np.arange(0,y_dim)))
-        for v_ind in range(len(xx)):
-            x_loc = xx[v_ind]
-            y_loc = yy[v_ind]
-            current_voxel = self.current_series[:,x_loc,y_loc]
-            new_corr_value = np.corrcoef(current_voxel,mean_roi_response)[0,1]
-            
-            self.heat_map[x_loc,y_loc] = new_corr_value
-
-        fh = plt.figure()
-        ax1 = fh.add_subplot(111)
-        hmap = ax1.imshow(self.heat_map,vmin = np.min(-1), vmax = np.max(1), cmap=plt.cm.RdBu,interpolation='none')
-        fh.colorbar(hmap, ax=ax1)
-        ax1.set_axis_off()
-
-        patch = patches.PathPatch(self.roi_path[0], facecolor='none', lw=1)
-        ax1.add_patch(patch)
  
 # %%        
     ##############################################################################

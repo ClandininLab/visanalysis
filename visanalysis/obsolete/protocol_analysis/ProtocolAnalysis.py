@@ -23,7 +23,7 @@ import inspect
 import yaml
 
 import visanalysis
-from visanalysis import imaging_data
+from visanalysis.imaging_data import AodScopeData, BrukerData
 
 
 class BaseAnalysis():
@@ -72,6 +72,10 @@ class BaseAnalysis():
                 newSeries['driver'] = current_run.attrs['fly:driver_1'][0:4]
                 newSeries['indicator'] = current_run.attrs['fly:indicator_1']
                 newSeries['fly_id'] = current_run.attrs['fly:fly_id']
+                
+                newSeries['rig'] = dataFile.attrs['rig']
+                newSeries['date'] = dataFile.attrs['date']
+                newSeries['experimenter'] = dataFile.attrs['experimenter']
 
 
                 # Pull out convenience parameters
@@ -108,9 +112,8 @@ class BaseAnalysis():
         ""
         
         ""
-        self.ImagingData = imaging_data.ImagingDataObject(file_name, series_number) #Load imaging data object for this imaging series
-        self.ImagingData.loadRois(roi_set_name) #load rois and roi responses
-        self.initializeAnalysis() #Initialize the subclass analysis
+        self.ImagingData = AodScopeData.ImagingDataObject(file_name, series_number) #Load imaging data object for this imaging series
+        self.initializeAnalysis(roi_set_name) #Initialize the subclass analysis
         
         fig_handle = plt.figure(figsize=(8,4))
         self.makeExamplePlots(fig_handle = fig_handle, export_to_igor_flag = export_to_igor_flag, eg_trace_ind = eg_trace_ind)
@@ -270,7 +273,3 @@ def getTraceMatrixByStimulusParameter(response_matrix,parameter_values):
         individual_traces.append(current_responses)
         
     return unique_parameter_values, mean_trace_matrix, sem_trace_matrix, individual_traces
-    
-
-# TODO: getResponseStatsByStimulusParameter() convenience function
-    

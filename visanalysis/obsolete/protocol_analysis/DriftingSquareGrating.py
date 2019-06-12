@@ -11,13 +11,14 @@ class DriftingSquareGratingAnalysis(pa.ProtocolAnalysis.BaseAnalysis):
     def __init__(self):
         super().__init__() #call the parent class init method first
 
-    def initializeAnalysis(self):
+    def initializeAnalysis(self, roi_name):
+        self.roi_name = roi_name
         orientation = [];
         for ep in self.ImagingData.epoch_parameters:
             orientation.append(ep['angle'])
     
         parameter_values = np.array([orientation]).T
-        self.unique_parameter_values, self.mean_trace_matrix, self.sem_trace_matrix, self.individual_traces = pa.ProtocolAnalysis.getTraceMatrixByStimulusParameter(self.ImagingData.response_matrix, parameter_values)
+        self.unique_parameter_values, self.mean_trace_matrix, self.sem_trace_matrix, self.individual_traces = pa.ProtocolAnalysis.getTraceMatrixByStimulusParameter(self.ImagingData.roi.get(self.roi_name).get('epoch_response'), parameter_values)
     
         self.orientations = np.unique(np.array(orientation))
         
@@ -42,7 +43,7 @@ class DriftingSquareGratingAnalysis(pa.ProtocolAnalysis.BaseAnalysis):
             else: 
                 new_ax = fig_handle.add_subplot(grid[0,ind_o])
             
-            new_ax.plot(self.ImagingData.time_vector, self.mean_trace_matrix[:,pull_ind,:].T)
+            new_ax.plot(self.ImagingData.roi.get(self.roi_name).get('time_vector'), self.mean_trace_matrix[:,pull_ind,:].T)
             new_ax.set_ylim([plot_y_min, plot_y_max])
             new_ax.set_axis_off()
             new_ax.set_title(int(o))

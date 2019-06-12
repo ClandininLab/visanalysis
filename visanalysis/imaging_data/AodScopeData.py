@@ -6,6 +6,7 @@ Created on Fri May 31 09:45:02 2019
 """
 import h5py
 import os
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import path
 
@@ -13,7 +14,7 @@ from matplotlib import path
 from visanalysis import plot_tools
 from visanalysis import imaging_data
 
-class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
+class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
     def __init__(self, file_name, series_number):
         super().__init__(file_name, series_number) #call the parent class init method
         
@@ -61,12 +62,14 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
                 newArray[lin[ind]] = 1
                 poi_mask.append(newArray.reshape(array.shape))
 
-#            poi_mask[self.poi_data['poi_locations'][:,1], self.poi_data['poi_locations'][:,0]] = 1
-#   
             poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], poi_mask, 1.0, self.colors)
             
             self.poi_data['poi_overlay'] = poi_overlay
             
+            # collect poi attributes
+            self.metadata = {}
+            for at in poi_group.attrs:
+                self.metadata[at] = poi_group.attrs[at]
     
         
     def getAcquisitionTiming(self):
@@ -108,4 +111,14 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
                     new_roi['time_vector'] = time_vector
                     
                     self.roi[gr] = new_roi
-            
+       
+        
+    def generateRoiMap(self, roi_name, scale_bar_length = 0):
+        fh = plt.figure(figsize=(4,4))
+        ax = fh.add_subplot(111)
+        ax.imshow(self.poi_data['poi_overlay'])
+        ax.set_aspect('equal')
+        ax.set_axis_off()
+        if scale_bar_length > 0:
+            microns_per_pixel = float(self.metadata['scan parameter/pixel size (um)'].replace('"',''))
+            plot_tools.addImageScaleBar(ax, self.poi_data['poi_overlay'], scale_bar_length, microns_per_pixel, 'lr')
