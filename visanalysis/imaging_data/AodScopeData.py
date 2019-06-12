@@ -7,6 +7,7 @@ Created on Fri May 31 09:45:02 2019
 import h5py
 import os
 import numpy as np
+from matplotlib import path
 
 
 from visanalysis import plot_tools
@@ -42,11 +43,27 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
             self.poi_data['poi_map'] = poi_group.get('poi_map')[:]
             self.poi_data['poi_locations']  = poi_group.get('poi_locations')[:]
             
-            poi_mask = np.ndarray(self.poi_data['snap_image'].shape)
-            poi_mask[:] = 0
-            poi_mask[self.poi_data['poi_locations'][:,1], self.poi_data['poi_locations'][:,0]] = 1
-   
-            poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], [poi_mask], 1.0)
+
+            poi_mask = []
+            pixX = np.arange(self.poi_data['snap_image'].shape[1])
+            pixY = np.arange(self.poi_data['snap_image'].shape[0])
+            yv, xv = np.meshgrid(pixX, pixY)
+            pix = np.vstack((yv.flatten(), xv.flatten())).T
+            
+            for poi_loc in self.poi_data['poi_locations']:
+                center = poi_loc
+                new_roi_path = path.Path.circle(center = center, radius = 5)
+                ind = new_roi_path.contains_points(pix, radius=0.5)
+                
+                array = np.zeros(self.poi_data['snap_image'].shape)
+                lin = np.arange(array.size)
+                newArray = array.flatten()
+                newArray[lin[ind]] = 1
+                poi_mask.append(newArray.reshape(array.shape))
+
+#            poi_mask[self.poi_data['poi_locations'][:,1], self.poi_data['poi_locations'][:,0]] = 1
+#   
+            poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], poi_mask, 1.0, self.colors)
             
             self.poi_data['poi_overlay'] = poi_overlay
             
