@@ -40,13 +40,14 @@ class ImagingDataObject():
          # Get stimulus metadata from Flystim hdf5 file
         self.epoch_parameters, self.run_parameters, self.notes = self.getEpochGroupMetadata()
 
+        self.colors = sns.color_palette("deep",n_colors = 20)
+        
     def checkEpochNumberCount(self):          
         flystim_epochs = len(self.epoch_parameters)
         presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
         if not flystim_epochs == presented_epochs:
             print('WARNING: metadata epochs do not equal presented epochs')
-          
-        self.colors = sns.color_palette("deep",n_colors = 10)
+
 # %%
     def loadImageSeries(self):
         # Load image series

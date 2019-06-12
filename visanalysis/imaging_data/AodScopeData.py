@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 
-
+from visanalysis import plot_tools
 from visanalysis import imaging_data
 
 class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
@@ -38,6 +38,19 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
             self.poi_data['photodiode_input'] = poi_group.get('photodiode_input')[:]
             
             self.poi_data['snap_image'] = poi_group.get('snap_image')[:]
+            
+            self.poi_data['poi_map'] = poi_group.get('poi_map')[:]
+            self.poi_data['poi_locations']  = poi_group.get('poi_locations')[:]
+            
+            poi_mask = np.ndarray(self.poi_data['snap_image'].shape)
+            poi_mask[:] = 0
+            poi_mask[self.poi_data['poi_locations'][:,1], self.poi_data['poi_locations'][:,0]] = 1
+   
+            poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], [poi_mask], 1.0)
+            
+            self.poi_data['poi_overlay'] = poi_overlay
+            
+    
         
     def getAcquisitionTiming(self):
         #get random access timing info
@@ -48,7 +61,7 @@ class AodScopeDataObject(imaging_data.ImagingData.ImagingDataObject):
     def getStimulusTiming(self):
         #get stimulus timing info from photodiode
         sample_rate = 1e4
-        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = True)
+        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = False)
         
     def getEpochResponses(self):
         """

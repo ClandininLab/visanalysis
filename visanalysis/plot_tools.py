@@ -150,8 +150,8 @@ def addImageScaleBar(ax, image, scale_bar_length, microns_per_pixel, location):
         end_x = start_x - dx
     ax.plot([start_x, end_x], [start_y, start_y],'w')
     
-def overlayImage(im, mask, alpha, colors):
-    im /= np.max(im)
+def overlayImage(im, mask, alpha, colors = None):
+    im = im / np.max(im)
     imRGB = np.tile(im[..., np.newaxis], 3)
 
     overlayComponent = 0
@@ -159,7 +159,11 @@ def overlayImage(im, mask, alpha, colors):
     compositeMask = np.tile(mask[0][..., np.newaxis], 3)
     for ind, currentRoi in enumerate(mask):
         maskRGB = np.tile(currentRoi[..., np.newaxis], 3)
-        newColor = colors[ind]
+        if colors is None:
+            newColor = (1, 0, 0)
+        else:     
+            newColor = colors[ind]
+            
         compositeMask = compositeMask + maskRGB
         overlayComponent += alpha * np.array(newColor) * maskRGB
         origImageComponent += (1 - alpha) * maskRGB * imRGB
