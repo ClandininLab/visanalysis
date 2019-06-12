@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import h5py
 import matplotlib.patches as patches
+import warnings
 
 from visanalysis import imaging_data
 from visanalysis import plot_tools
@@ -38,6 +39,9 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         """
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
             roi_group = experiment_file['/epoch_runs'].get(str(self.series_number)).get('rois')
+            if roi_group is None:
+                warnings.warn("!!No rois found for this image series!!")
+                return
             
             self.roi = {}
             for gr in roi_group:
@@ -45,14 +49,15 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
                 if type(roi_group.get(gr)) is h5py._hl.group.Group:
                     new_roi['roi_mask'] = list(roi_group.get(gr).get("roi_mask")[:])
                     new_roi['roi_image'] = list(roi_group.get(gr).get("roi_image")[:])
-                    
-                    new_roi['roi_path'] = roi_group.get(gr).get("path_vertices")[:]
-#                    ind = 0
-#                    while new_path is not None:
-#                        new_roi['roi_path'].append(new_path)
-#                        ind += 1
-#                        new_path = roi_group.get(gr).get("path_vertices_" + str(ind))
-                            
+                                        
+                    new_roi['roi_path'] = []
+                    new_path = roi_group.get(gr).get("path_vertices_0")[:]
+                    ind = 0
+                    while new_path is not None:
+                        new_roi['roi_path'].append(new_path)
+                        ind += 1
+                        new_path = roi_group.get(gr).get("path_vertices_" + str(ind))
+
                     new_roi['roi_response'] = np.squeeze(roi_group.get(gr).get("roi_response")[:], axis = 1)
                     
                     time_vector, response_matrix = self.getEpochResponseMatrix(respose_trace = new_roi['roi_response'])
