@@ -62,7 +62,7 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
                 newArray[lin[ind]] = 1
                 poi_mask.append(newArray.reshape(array.shape))
 
-            poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], poi_mask, 1.0, self.colors)
+            poi_overlay = plot_tools.overlayImage(self.poi_data['snap_image'], poi_mask, 1.0)
             
             self.poi_data['poi_overlay'] = poi_overlay
             
@@ -95,7 +95,10 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
             #Get background point trace, if it exists
             if poi_group.get('background'):
                 dark_number = poi_group.get('background').get('poi_numbers')[:]
-                dark_trace = self.poi_data['poi_data_matrix'][dark_number,:]
+                dark_trace = np.mean(self.poi_data['poi_data_matrix'][dark_number,:], axis = 0)
+            elif poi_group.get('bg'):
+                dark_number = poi_group.get('bg').get('poi_numbers')[:]
+                dark_trace = np.mean(self.poi_data['poi_data_matrix'][dark_number,:], axis = 0)
             else:
                 dark_trace = 0
                             

@@ -14,8 +14,10 @@ for k in ImagingData.roi.keys():
 # %% Plot roi responses
 roi_name = 'Lobula plate'
     
+
 fh = plt.figure()
-for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
+no_pois = ImagingData.roi[roi_name]['epoch_response'].shape[0]
+for roi in range(no_pois):
     ax = fh.add_subplot(6,2,roi+1)
     time_vector = ImagingData.roi[roi_name]['time_vector']
     no_trials = ImagingData.roi[roi_name]['epoch_response'][roi,:,:].shape[0]
