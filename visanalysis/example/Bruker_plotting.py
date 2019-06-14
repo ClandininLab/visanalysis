@@ -20,7 +20,7 @@ for k in ImagingData.roi.keys():
 
 
 # %% Plot roi responses
-roi_name = 'test_1'
+roi_name = 'heather_1'
     
 fh = plt.figure()
 for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
@@ -32,7 +32,7 @@ for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
     current_sem = current_std / np.sqrt(no_trials)
     
     ax.plot(time_vector, current_mean, 'k')
-    ax.fill_between(time_vector, current_mean - current_std, current_mean + current_std, alpha = 0.5)
+    ax.fill_between(time_vector, current_mean - current_sem, current_mean + current_sem, alpha = 0.5)
     
 
 # %% Use analysis functions
