@@ -28,7 +28,8 @@ def main():
         series_number = int(re.split('-|\.',file_name)[-2])
         tmp_str = re.split('-', file_name)[1]
         fn = ''.join([tmp_str[0:4],'-',tmp_str[4:6],'-',tmp_str[6:8]])
-        ImagingData = imaging_data.ImagingDataObject(fn, series_number)
+        ImagingData = imaging_data.BrukerData.ImagingDataObject(fn, series_number, load_rois = False)
+        ImagingData.image_series_name = 'TSeries-' + fn.replace('-','') + '-' + ('00' + str(series_number))[-3:]
         ImagingData.loadImageSeries()
         
         ImagingData.registerStack()

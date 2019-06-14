@@ -75,7 +75,7 @@ class ImagingDataObject():
     def registerStack(self):
         """
         """
-        reference_time_frame = 1000 #msec, first frames to use as reference for registration
+        reference_time_frame = 1 #sec, first frames to use as reference for registration
         reference_frame = np.where(self.response_timing['stack_times'] > reference_time_frame)[0][0]
         
         reference_image = np.squeeze(np.mean(self.raw_series[0:reference_frame,:,:], axis = 0))

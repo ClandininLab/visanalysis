@@ -17,7 +17,7 @@ from visanalysis import imaging_data
 from visanalysis import plot_tools
 
 class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
-    def __init__(self, file_name, series_number):
+    def __init__(self, file_name, series_number, load_rois = True):
         super().__init__(file_name, series_number) #call the parent class init
         # Image series is of the format: TSeries-YYYYMMDD-00n
         self.image_series_name = 'TSeries-' + file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
@@ -25,13 +25,14 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         # Get timing info for acquisition and stimulus
         self.getAcquisitionTiming()
         self.getStimulusTiming()
-        
-        # Get epoch responses for rois
-        self.getEpochResponses()
         self.checkEpochNumberCount()
         
         self.metadata = self.getPVMetadata()
         
+        if load_rois:
+            # Get epoch responses for rois
+            self.getEpochResponses()
+
     def getEpochResponses(self):
         """
         Assigns:
