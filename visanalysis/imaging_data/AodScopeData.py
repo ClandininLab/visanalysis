@@ -81,7 +81,7 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
     def getStimulusTiming(self):
         #get stimulus timing info from photodiode
         sample_rate = 1e4
-        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = False)
+        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = True)
         
     def getEpochResponses(self):
         """

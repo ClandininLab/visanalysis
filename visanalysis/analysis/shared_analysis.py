@@ -37,8 +37,71 @@ def getTraceMatrixByStimulusParameter(response_matrix,parameter_values):
         
     return unique_parameter_values, mean_trace_matrix, sem_trace_matrix, individual_traces
 
+def getEpochResponseHyperstack(ImagingData):
+    """
+    getEpochResponseHyperstack(ImagingData)
+        Takes in long stack and splits it up into substacks for each stimulus epoch
+    
+    Args:
+        stack (ndarray): image stack.
+            shape = (num frames, dimY dimX)
+        ImagingData object
+    Returns:
+        timeVector (ndarray): in seconds. Time points of each frame acquisition within each epoch
+        responseMatrix (ndarray): sub-hyperstacks for each epoch
+            shape = (num epochs, num frames per epoch, xDim, yDim)
+    """
+    stack = ImagingData.current_series
+    
+    stimulus_start_times = ImagingData.stimulus_timing['stimulus_start_times']
+    stimulus_end_times = ImagingData.stimulus_timing['stimulus_end_times']
+    pre_time = ImagingData.run_parameters['pre_time'] * 1e3 #sec -> msec
+    tail_time = ImagingData.run_parameters['tail_time'] * 1e3 #sec -> msec
+    epoch_start_times = stimulus_start_times - pre_time
+    epoch_end_times = stimulus_end_times + tail_time
 
-def plotResponseByCondition(ImagingData, roi_name, eg_ind = 0, condition = None, fig_handle = None):
+    sample_period = ImagingData.response_timing['sample_period'] #msec
+    stack_times = ImagingData.response_timing['stack_times'] #msec
+    no_trials = len(epoch_start_times)
+
+    # Use measured stimulus lengths for stim time instead of epoch param
+    # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
+    epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #msec
+    
+    # find how many acquisition frames correspond to pre, stim, tail time
+    epoch_frames = int(epoch_time / sample_period) #in acquisition frames
+    pre_frames = int(pre_time / sample_period) #in acquisition frames
+    time_vector = np.arange(0,epoch_frames) * sample_period / 1e3 # msec -> sec
+
+    dimX = stack.shape[1]; dimY = stack.shape[2]; dimT = stack.shape[0];
+    epoch_response_hyperstack = np.empty(shape=(no_trials, epoch_frames, dimX, dimY), dtype=float)
+    epoch_response_hyperstack[:] = np.nan
+    cutInds = np.empty(0, dtype = int)
+    for idx, val in enumerate(epoch_start_times): #for stimulus epochs
+        stackInds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
+        if len(stackInds) == 0: # no imaging frames during this stimulus presentation
+            cutInds = np.append(cutInds,idx)
+            continue
+        if np.any(stackInds > dimT): # stimulus epochs extend beyond imaging frames
+            cutInds = np.append(cutInds,idx)
+            continue
+        if idx is not 0:
+            if len(stackInds) < epoch_frames: #not enough imaging frames to fill out entire epoch
+                cutInds = np.append(cutInds,idx)
+                continue
+        newTrialResponseStack = stack[stackInds,:,:]
+        
+        epoch_response_hyperstack[idx,:,:,:] = newTrialResponseStack[0:epoch_frames,:,:]
+    
+    epoch_response_hyperstack = np.delete(epoch_response_hyperstack,cutInds, axis = 0)
+        
+    return time_vector, epoch_response_hyperstack
+
+# %%        
+    ##############################################################################
+    #Plotting functions
+    ##############################################################################
+def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind = 0 , fig_handle = None):
     conditioned_param = [];
     for ep in ImagingData.epoch_parameters:
         conditioned_param.append(ep[condition])
@@ -115,63 +178,3 @@ def plotRoiResponses(ImagingData, roi_name, fig_handle = None):
             
     fig_handle.canvas.draw()
     return fig_handle
-
-def getEpochResponseHyperstack(ImagingData):
-    """
-    getEpochResponseHyperstack(ImagingData)
-        Takes in long stack and splits it up into substacks for each stimulus epoch
-    
-    Args:
-        stack (ndarray): image stack.
-            shape = (num frames, dimY dimX)
-        ImagingData object
-    Returns:
-        timeVector (ndarray): in seconds. Time points of each frame acquisition within each epoch
-        responseMatrix (ndarray): sub-hyperstacks for each epoch
-            shape = (num epochs, num frames per epoch, xDim, yDim)
-    """
-    stack = ImagingData.current_series
-    
-    stimulus_start_times = ImagingData.stimulus_timing['stimulus_start_times']
-    stimulus_end_times = ImagingData.stimulus_timing['stimulus_end_times']
-    pre_time = ImagingData.run_parameters['pre_time'] * 1e3 #sec -> msec
-    tail_time = ImagingData.run_parameters['tail_time'] * 1e3 #sec -> msec
-    epoch_start_times = stimulus_start_times - pre_time
-    epoch_end_times = stimulus_end_times + tail_time
-
-    sample_period = ImagingData.response_timing['sample_period'] #msec
-    stack_times = ImagingData.response_timing['stack_times'] #msec
-    no_trials = len(epoch_start_times)
-
-    # Use measured stimulus lengths for stim time instead of epoch param
-    # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
-    epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #msec
-    
-    # find how many acquisition frames correspond to pre, stim, tail time
-    epoch_frames = int(epoch_time / sample_period) #in acquisition frames
-    pre_frames = int(pre_time / sample_period) #in acquisition frames
-    time_vector = np.arange(0,epoch_frames) * sample_period / 1e3 # msec -> sec
-
-    dimX = stack.shape[1]; dimY = stack.shape[2]; dimT = stack.shape[0];
-    epoch_response_hyperstack = np.empty(shape=(no_trials, epoch_frames, dimX, dimY), dtype=float)
-    epoch_response_hyperstack[:] = np.nan
-    cutInds = np.empty(0, dtype = int)
-    for idx, val in enumerate(epoch_start_times): #for stimulus epochs
-        stackInds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
-        if len(stackInds) == 0: # no imaging frames during this stimulus presentation
-            cutInds = np.append(cutInds,idx)
-            continue
-        if np.any(stackInds > dimT): # stimulus epochs extend beyond imaging frames
-            cutInds = np.append(cutInds,idx)
-            continue
-        if idx is not 0:
-            if len(stackInds) < epoch_frames: #not enough imaging frames to fill out entire epoch
-                cutInds = np.append(cutInds,idx)
-                continue
-        newTrialResponseStack = stack[stackInds,:,:]
-        
-        epoch_response_hyperstack[idx,:,:,:] = newTrialResponseStack[0:epoch_frames,:,:]
-    
-    epoch_response_hyperstack = np.delete(epoch_response_hyperstack,cutInds, axis = 0)
-        
-    return time_vector, epoch_response_hyperstack

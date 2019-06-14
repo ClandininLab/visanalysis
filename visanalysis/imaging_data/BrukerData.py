@@ -69,7 +69,7 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
     def getAcquisitionTiming(self): #from bruker metadata (xml) file 
         """
         
-        Bruker imaging acquisition is based on the bruker metadata file (xml)
+        Bruker imaging acquisition metadata based on the bruker metadata file (xml)
 
         """
 
@@ -154,8 +154,10 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         self.stimulus_timing = self.getEpochAndFrameTiming(tt, frame_monitor, sample_rate, plot_trace_flag = False)
         
         
-    # %% 
-
+# %%        
+    ##############################################################################
+    #Image plotting functions
+    ##############################################################################
     def generateRoiMap(self, roi_name, scale_bar_length = 0):
         newImage = plot_tools.overlayImage(self.roi.get(roi_name).get('roi_image'), self.roi.get(roi_name).get('roi_mask'), 0.5, self.colors)
         

@@ -13,8 +13,6 @@ import os
 import h5py
 from operator import itemgetter
 import pylab
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import seaborn as sns
 import scipy.signal as signal
 import inspect
@@ -246,12 +244,7 @@ class ImagingDataObject():
 
     def getSeriesIDSuffix(self):
         return self.file_name.replace('-','') + '_' + str(self.series_number)
-        
 
-    def plotResponseTraces(self, roi_ind = 0):
-        fig_handle = plt.figure(figsize=(4.5,3.25))
-        ax_handle = fig_handle.add_subplot(111)
-        ax_handle.plot(self.time_vector, self.response_matrix[roi_ind,:,:].T)
 
 # %%         
     def getEpochGroupMetadata(self):
