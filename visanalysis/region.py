@@ -7,11 +7,12 @@ Created on Fri Jun 29 13:15:58 2018
 """
 import numpy as np
 import matplotlib.cm as cm
+import sys
 
 import pyqtgraph as pg
 from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
 from pyqtgraph.widgets.PlotWidget import PlotWidget
-from PyQt5.QtWidgets import (QPushButton, QWidget, QGridLayout, QLineEdit, QComboBox)
+from PyQt5.QtWidgets import (QPushButton, QWidget, QGridLayout, QLineEdit, QComboBox, QApplication)
 from matplotlib import path
 from matplotlib.widgets import LassoSelector
 from matplotlib.widgets import EllipseSelector
@@ -220,6 +221,11 @@ class MultiROISelector(QWidget):
             self.lasso = LassoSelector(ax1, self.onselectFreehand)
         else:
             print('Warning ROI type not recognized. Choose circle or freehand')
-        
-        
-        
+
+if __name__ == "__main__":
+    def run_app():
+        app = QApplication(sys.argv)
+        mainWin = MultiROISelector()
+        mainWin.show()
+        app.exec_()
+    run_app()
