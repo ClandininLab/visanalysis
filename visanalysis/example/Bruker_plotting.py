@@ -20,7 +20,7 @@ for k in ImagingData.roi.keys():
 
 
 # %% Plot roi responses
-roi_name = 'heather_1'
+roi_name = 'test_1'
     
 fh = plt.figure()
 for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
