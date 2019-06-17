@@ -37,7 +37,7 @@ def main():
         print('Saved: ' + save_path)
         imsave(save_path, ImagingData.registered_series)
         
-        os.remove(os.path.join(file_directory, file_name))
+        #os.remove(os.path.join(file_directory, file_name))
 
     sys.exit()
     
