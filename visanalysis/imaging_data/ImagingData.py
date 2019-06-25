@@ -188,31 +188,80 @@ class ImagingDataObject():
                 current_roi_group.create_dataset("path_vertices_" + str(p_ind), data = p.vertices)
  
     def loadRois(self, roi_set_name):
+        print('Loading roi set  {}...'.format(roi_set_name))
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
-            roi_set_group = experiment_file['/epoch_runs'].get(str(self.series_number)).get('rois').get(roi_set_name)
-
+            if 'series' in roi_set_name: #roi set from a different series
+                series_no = roi_set_name.split(':')[0].split('series')[1]
+                roi_name = roi_set_name.split(':')[1]
+                roi_set_group = experiment_file['/epoch_runs'].get(series_no).get('rois').get(roi_name)
+                compute_roi_response = True
+                
+            else: #from this series
+                roi_set_group = experiment_file['/epoch_runs'].get(str(self.series_number)).get('rois').get(roi_set_name)
+                compute_roi_response = False
+                
+            # load the roi path  and mask
             self.roi_mask = list(roi_set_group.get("roi_mask")[:]) #load from hdf5 metadata file
-            self.roi_response = list(roi_set_group.get("roi_response")[:])
-            self.roi_image = roi_set_group.get("roi_image")[:]
             
             self.roi_path = []
-            new_path = roi_set_group.get("path_vertices_0")[:]
+            new_path = roi_set_group.get("path_vertices_0")
             ind = 0
             while new_path is not None:
                 self.roi_path.append(new_path)
                 ind += 1
                 new_path = roi_set_group.get("path_vertices_" + str(ind))
                 
-        self.getResponseTraces()
+            self.roi_path = [x[:] for x in self.roi_path]
+                
+            if compute_roi_response:
+                self.roi_response = [self.getRoiDataFromMask(x) for x in self.roi_mask]
+            else: #just load directly from h5 file
+                self.roi_response = list(roi_set_group.get("roi_response")[:])
 
-    def getAvailableROIsets(self):
+        print('Roi set {} loaded!'.format(roi_set_name))
+
+    def getAvailableROIsets(self, get_rois_from_other_series = True):
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r+') as experiment_file:
             roi_parent_group = experiment_file['/epoch_runs'].get(str(self.series_number)).require_group('rois')
             roi_set_names = []
             for roi_set in roi_parent_group:
                 roi_set_names.append(roi_set)
+
+            if get_rois_from_other_series:
+                target_shape = self.roi_image.shape
+                for series in experiment_file['/epoch_runs']:
+                    if series == str(self.series_number):
+                        pass
+                    else:
+                        series_group = experiment_file['/epoch_runs'].get(series)
+                        prefix = 'series{}:'.format(series)
+                        roi_parent_group = series_group.require_group('rois')
+                        for roi_set in roi_parent_group:
+                            roi_set_group = roi_parent_group.get(roi_set)
+                            roi_image = roi_set_group.get("roi_image")[:]
+                            if roi_image.shape == target_shape:
+                                roi_set_names.append(prefix+roi_set)
         
         return roi_set_names
+    
+    
+    def getRoiMask(self, indices):
+        array = np.zeros((self.roi_image.shape[0], self.roi_image.shape[1]))
+        lin = np.arange(array.size)
+        newRoiArray = array.flatten()
+        newRoiArray[lin[indices]] = 1
+        newRoiArray = newRoiArray.reshape(array.shape)
+
+        mask = newRoiArray == 1 #convert to boolean for masking
+        
+        return mask
+    
+    def getRoiDataFromMask(self,mask):
+        newRoiResp = (np.mean(self.current_series[:,mask], axis = 1, keepdims=True) -
+                   np.min(self.current_series)).T
+                      
+        return newRoiResp
+        
 
 # %%        
     ##############################################################################
@@ -253,7 +302,7 @@ class ImagingDataObject():
     
     def __getEpochGroupMetadata(self):
         """
-        For reading stimulus metadata from flystim data file
+        For reading stimulus metadata from visprotocol data file
         """
 
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:

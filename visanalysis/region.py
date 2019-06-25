@@ -98,30 +98,12 @@ class MultiROISelector(QWidget):
         
         self.show()
 
-    def getNewROI(self,indices):
-        array = np.zeros((self.yDim, self.xDim))
-        lin = np.arange(array.size)
-        newArray = array.flatten()
-        newArray[lin[indices]] = 1
-        return newArray.reshape(array.shape)
-    
     def onselectFreehand(self,verts):
         global array, pix
         new_roi_path = path.Path(verts)
         ind = new_roi_path.contains_points(self.pix, radius=1)
-        newRoiArray = self.getNewROI(ind)
-        newRoiArray = newRoiArray == 1 #convert to boolean for masking
-
-        newRoiResp = (np.mean(self.ImagingData.current_series[:,newRoiArray], axis = 1, keepdims=True) -
-                   np.min(self.ImagingData.current_series)).T
-        # Update list of ROIs and ROI responses
-        self.newRoiResp = newRoiResp;
-        self.ImagingData.roi_mask.append(newRoiArray)
-        self.ImagingData.roi_response.append(newRoiResp)
-        self.ImagingData.roi_path.append(new_roi_path)
         
-        # Update figures
-        self.redrawRoiTraces()
+        self.updateRoiSelection(ind, new_roi_path)
 
     def onselectEllipse(self,pos1,pos2,definedRadius = None):
         global array, pix
@@ -138,21 +120,21 @@ class MultiROISelector(QWidget):
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         new_roi_path = path.Path.circle(center = center, radius = radiusX)
         ind = new_roi_path.contains_points(self.pix, radius=0.5)
-
-        newRoiArray = self.getNewROI(ind)
-        newRoiArray = newRoiArray == 1 #convert to boolean for masking
-
-        newRoiResp = (np.mean(self.ImagingData.current_series[:,newRoiArray], axis = 1, keepdims=True) -
-                   np.min(self.ImagingData.current_series)).T
-        # Update list of ROIs and ROI responses
-        self.newRoiResp = newRoiResp;
-        self.ImagingData.roi_mask.append(newRoiArray)
-        self.ImagingData.roi_response.append(newRoiResp)
-        self.ImagingData.roi_path.append(new_roi_path)
-
+        
+        self.updateRoiSelection(ind, new_roi_path)
+        
+    def updateRoiSelection(self, ind, path):
+        mask = self.ImagingData.getRoiMask(ind)
+        self.newRoiResp = self.ImagingData.getRoiDataFromMask(mask)
+        
+        #update list of roi data
+        self.ImagingData.roi_mask.append(mask)
+        self.ImagingData.roi_path.append(path)
+        self.ImagingData.roi_response.append(self.newRoiResp)
+        
         # Update figures
         self.redrawRoiTraces()
-        
+
     def onSelectedRoiType(self):
         self.roiType = self.RoiTypeComboBox.currentText().split(':')[0]
         if 'circle' in self.RoiTypeComboBox.currentText():
@@ -178,6 +160,7 @@ class MultiROISelector(QWidget):
         self.redrawRoiTraces()
         
     def onPressedSaveRoisButton(self):
+        print(len(self.ImagingData.roi_path))
         self.ImagingData.saveRois(roi_set_name = self.le_roiSetName.text())
 
     def onPressedLoadRoisButton(self):
