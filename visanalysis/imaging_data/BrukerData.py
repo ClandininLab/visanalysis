@@ -58,12 +58,14 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
                     new_roi['roi_image'] = list(roi_group.get(gr).get("roi_image")[:])
                                         
                     new_roi['roi_path'] = []
-                    new_path = roi_group.get(gr).get("path_vertices_0")[:]
+                    new_path = roi_group.get(gr).get("path_vertices_0")
                     ind = 0
                     while new_path is not None:
                         new_roi['roi_path'].append(new_path)
                         ind += 1
                         new_path = roi_group.get(gr).get("path_vertices_" + str(ind))
+                        
+                    new_roi['roi_path'] = [x[:] for x in new_roi['roi_path']]
 
                     new_roi['roi_response'] = np.squeeze(roi_group.get(gr).get("roi_response")[:], axis = 1)
                     
