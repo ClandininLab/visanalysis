@@ -15,8 +15,9 @@ from visanalysis import plot_tools
 from visanalysis import imaging_data
 
 class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
-    def __init__(self, file_name, series_number):
+    def __init__(self, file_name, series_number, background_subtract = 'continuous'):
         super().__init__(file_name, series_number) #call the parent class init method
+        self.background_subtract = background_subtract
         
         self.getPoiData()
         
@@ -50,6 +51,16 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
                 dark_trace = np.mean(self.poi_data['poi_data_matrix'][dark_number,:], axis = 0)
             else:
                 dark_trace = 0
+                
+            if self.background_subtract == 'continuous':
+                pass
+            elif self.background_subtract == 'constant':
+                dark_trace = np.mean(dark_trace)
+            elif self.background_subtract == 'none':
+                dark_trace = 0
+            else:
+                dark_trace = 0
+                
                             
             for gr in poi_group:
                 new_roi = {}
@@ -142,5 +153,5 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
     def __getStimulusTiming(self):
         #get stimulus timing info from photodiode
         sample_rate = 1e4
-        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = True)
+        self.stimulus_timing = self.getEpochAndFrameTiming(self.poi_data['photodiode_time'], self.poi_data['photodiode_input'], sample_rate, plot_trace_flag = False)
         
