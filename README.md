@@ -1,5 +1,5 @@
 # visanalysis
-Analysis environment for flystim imaging experiments
+Analysis environment for visprotocol/flystim imaging experiments
 Max Turner
 mhturner@stanford.edu
 
