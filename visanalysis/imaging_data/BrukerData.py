@@ -14,6 +14,7 @@ import skimage.io as io
 from registration import CrossCorr
 import matplotlib.patches as patches
 import warnings
+from scipy import stats
 
 from visanalysis import imaging_data
 from visanalysis import plot_tools
@@ -169,7 +170,123 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
             self.registered_series = self.registered_series.toseries().toarray().transpose(3,0,1,2) # shape t, z, y, x
 
         self.current_series = self.registered_series
-    
+        
+# %%        
+    ##############################################################################
+    #Functions for volumetric data
+    ##############################################################################       \
+    def getTrialAlignedVoxelResponses(self, brain):
+        #brain is shape (x,y,z,t)
+        
+        #zero values are from registration. Replace with nan
+        brain[np.where(brain ==0)] = np.nan
+        #set to minimum
+        brain[np.where(np.isnan(brain))] = np.nanmin(brain)
+        
+        stimulus_start_times = self.stimulus_timing['stimulus_start_times'] #sec
+        stimulus_end_times = self.stimulus_timing['stimulus_end_times'] #sec
+        pre_time = self.run_parameters['pre_time'] #sec
+        tail_time = self.run_parameters['tail_time'] #sec
+        epoch_start_times = stimulus_start_times - pre_time
+        epoch_end_times = stimulus_end_times +  tail_time
+        
+        sample_period = self.response_timing['sample_period'] #sec
+        stack_times = self.response_timing['stack_times'] #sec
+        
+        # Use measured stimulus lengths for stim time instead of epoch param
+        # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
+        epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #sec
+        
+        # find how many acquisition frames correspond to pre, stim, tail time
+        epoch_frames = int(epoch_time / sample_period) #in acquisition frames
+        time_vector = np.arange(0,epoch_frames) * sample_period # sec
+        
+        no_trials = len(epoch_start_times)
+        brain_trial_matrix = np.ndarray(shape=(brain.shape[0], brain.shape[1], brain.shape[2], no_trials, epoch_frames), dtype='float32') #x, y, z, trials, time_vector
+        brain_trial_matrix[:] = np.nan
+        cut_inds = np.empty(0, dtype = int)
+        for idx, val in enumerate(epoch_start_times):
+            stack_inds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
+            if len(stack_inds) == 0: #no imaging acquisitions happened during this epoch presentation
+                cut_inds = np.append(cut_inds,idx)
+                continue
+            if np.any(stack_inds > brain.shape[3]):
+                cut_inds = np.append(cut_inds,idx)
+                continue
+            if idx is not 0:
+                if len(stack_inds) < epoch_frames: #missed images for the end of the stimulus
+                    cut_inds = np.append(cut_inds,idx)
+                    continue
+                
+            #Get voxel responses for this epoch
+            new_resp_chunk = brain[:,:,:,stack_inds]
+
+            brain_trial_matrix[:,:,:,idx] = new_resp_chunk[:,:,:,0:epoch_frames]
+            
+        brain_trial_matrix = np.delete(brain_trial_matrix, cut_inds, axis = 4)
+
+        return time_vector, brain_trial_matrix
+
+    def getConcatenatedMeanVoxelResponses(self, brain, parameter_keys, p_cutoff = 0.01, significant_stimuli = 3):
+        time_vector, brain_trial_matrix = self.getTrialAlignedVoxelResponses(brain)
+        
+        parameter_values = np.ndarray((len(self.epoch_parameters), len(parameter_keys)))
+        for ind_e, ep in enumerate(self.epoch_parameters):
+            for ind_k, k in enumerate(parameter_keys):
+                new_val = ep.get(k)
+                if new_val == 'elevation':
+                    new_val = 0
+                elif new_val == 'azimuth':
+                    new_val = 90
+                parameter_values[ind_e, ind_k] = new_val
+                
+        
+        unique_parameter_values = np.unique(parameter_values, axis = 0)
+
+        pre_frames = int(self.run_parameters['pre_time'] / self.response_timing.get('sample_period'))
+        stim_frames = int(self.run_parameters['stim_time'] / self.response_timing.get('sample_period'))
+        tail_frames = int(self.run_parameters['tail_time'] / self.response_timing.get('sample_period'))
+        
+        x_dim = brain_trial_matrix.shape[0]
+        y_dim = brain_trial_matrix.shape[1]
+        z_dim = brain_trial_matrix.shape[2]
+        
+        mean_resp = []
+        std_resp = []
+        p_values = []
+        for up in unique_parameter_values:
+            pull_inds = np.where((up == parameter_values).all(axis = 1))[0]
+            
+            baseline_pre = brain_trial_matrix[:,:,:,pull_inds,0:pre_frames]
+            baseline_tail = brain_trial_matrix[:,:,:,pull_inds,-int(tail_frames/2):]
+            baseline_points = np.concatenate((baseline_pre, baseline_tail), axis = 4)
+            
+            #TODO: find voxels that are nonresponsive to ALL stimuli
+            _, p = stats.ttest_ind(np.reshape(baseline_points, (x_dim, y_dim, z_dim, -1)), 
+                                   np.reshape(brain_trial_matrix[:,:,:,pull_inds,pre_frames:(pre_frames+stim_frames)], (x_dim, y_dim, z_dim, -1)), axis = 3)
+        
+            p_values.append(p)
+            
+            baseline = np.mean(baseline_points, axis = (3,4))
+            baseline = np.expand_dims(np.expand_dims(baseline, axis = 3), axis = 4)
+            
+            new_dff = (brain_trial_matrix[:,:,:,pull_inds,:] - baseline) / baseline
+        
+            mean_resp.append(np.mean(new_dff, axis = 3))
+            std_resp.append(np.std(new_dff, axis = 3))
+        
+        p_values = np.stack(p_values, axis = 3) #x y z stimulus
+        sig_responses = (p_values < p_cutoff).sum(axis = 3)
+        responsive_voxels = sig_responses > significant_stimuli
+        
+        mean_resp = np.concatenate(mean_resp, axis = 3)
+        std_resp = np.concatenate(std_resp, axis = 3)
+        
+        #turn nonresponsive voxels to nan
+        mean_resp[~responsive_voxels] = np.nan
+        std_resp[~responsive_voxels] = np.nan
+        
+        return mean_resp, std_resp, unique_parameter_values
         
 # %%        
     ##############################################################################
@@ -184,22 +301,34 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
             
         # Get acquisition times from imaging metadata
         root = metaData.getroot()
-        stack_times = []
-        frame_times = []
-
-        # Single-plane, xy time series
-        for child in root.find('Sequence').getchildren():
-            frTime = child.get('relativeTime')
-            if frTime is not None:
-                stack_times.append(float(frTime))        
-        stack_times = np.array(stack_times)
-        stack_times = stack_times[1:] #trim extra 0 at start
-        frame_times = stack_times
+        
+        if root.find('Sequence').get('type') == 'TSeries ZSeries Element':
+            # volumetric xyz time series
+            num_t = len(root.findall('Sequence'))
+            num_z = len(root.find('Sequence').findall('Frame'))
+            frame_times = np.ndarray(shape = (num_t, num_z), dtype = float)
+            frame_times[:] = np.nan
+            for t_ind, t_step in enumerate(root.findall('Sequence')):
+                for z_ind, z_step in enumerate(t_step.findall('Frame')):
+                    frame_times[t_ind,z_ind] = z_step.get('relativeTime')
+                    
+            stack_times = frame_times[:,0]
+            sample_period = np.mean(np.diff(stack_times))
             
-        stack_times = stack_times # sec
-        frame_times = frame_times # sec
-        sample_period = np.mean(np.diff(stack_times)) # sec
-        self.response_timing = {'stack_times':stack_times, 'frame_times':frame_times, 'sample_period':sample_period }
+            self.response_timing = {'frame_times':frame_times, 'stack_times':stack_times, 'sample_period':sample_period}
+            
+        elif root.find('Sequence').get('type') == 'TSeries Timed Element':     
+            # Single-plane, xy time series
+            stack_times = []
+            for frame in root.find('Sequence').findall('Frame'):
+                frTime = frame.get('relativeTime')
+                stack_times.append(float(frTime))
+                
+            stack_times = np.array(stack_times)
+        
+            sample_period = np.mean(np.diff(stack_times)) #. sec
+            self.response_timing = {'stack_times':stack_times, 'sample_period':sample_period}
+            
             
     def __getPVMetadata(self):
         metaData = ET.parse(os.path.join(self.image_data_directory, self.image_series_name) + '.xml')
@@ -256,4 +385,4 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         #TODO: Change to handle multiple photodiode signals
         frame_monitor = data_frame.get(' ' + active_channels[0]).values
         
-        self.stimulus_timing = self.getEpochAndFrameTiming(tt, frame_monitor, sample_rate, plot_trace_flag = False)
+        self.stimulus_timing = self.getEpochAndFrameTiming(tt, frame_monitor, sample_rate, plot_trace_flag = False, command_frame_rate = 115)
