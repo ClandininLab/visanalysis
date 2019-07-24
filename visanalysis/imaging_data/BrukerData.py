@@ -227,9 +227,7 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
 
         return time_vector, brain_trial_matrix
 
-    def getConcatenatedMeanVoxelResponses(self, brain, parameter_keys, p_cutoff = 0.01, significant_stimuli = 3):
-        time_vector, brain_trial_matrix = self.getTrialAlignedVoxelResponses(brain)
-        
+    def getConcatenatedMeanVoxelResponses(self, brain_trial_matrix, parameter_keys):
         parameter_values = np.ndarray((len(self.epoch_parameters), len(parameter_keys)))
         for ind_e, ep in enumerate(self.epoch_parameters):
             for ind_k, k in enumerate(parameter_keys):
@@ -257,36 +255,42 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         for up in unique_parameter_values:
             pull_inds = np.where((up == parameter_values).all(axis = 1))[0]
             
+            #get baseline timepoints for each voxel
             baseline_pre = brain_trial_matrix[:,:,:,pull_inds,0:pre_frames]
             baseline_tail = brain_trial_matrix[:,:,:,pull_inds,-int(tail_frames/2):]
             baseline_points = np.concatenate((baseline_pre, baseline_tail), axis = 4)
             
-            #TODO: find voxels that are nonresponsive to ALL stimuli
-            _, p = stats.ttest_ind(np.reshape(baseline_points, (x_dim, y_dim, z_dim, -1)), 
-                                   np.reshape(brain_trial_matrix[:,:,:,pull_inds,pre_frames:(pre_frames+stim_frames)], (x_dim, y_dim, z_dim, -1)), axis = 3)
+            #dF/F
+            baseline = np.mean(baseline_points, axis = (3,4))
+            baseline = np.expand_dims(np.expand_dims(baseline, axis = 3), axis = 4)
+            response_dff = (brain_trial_matrix[:,:,:,pull_inds,:] - baseline) / baseline
+            baseline_dff = (baseline_points - baseline) / baseline
+#            
+#            #set any nans (baseline 0) to 0. 0s come from registration
+#            baseline_dff[np.isnan(baseline_dff)] = 0
+#            response_dff[np.isnan(response_dff)] = 0
+#            
+            _, p = stats.ttest_ind(np.reshape(baseline_dff, (x_dim, y_dim, z_dim, -1)), 
+                                   np.reshape(response_dff[:,:,:,:,pre_frames:(pre_frames+stim_frames)], (x_dim, y_dim, z_dim, -1)), axis = 3)
         
             p_values.append(p)
             
-            baseline = np.mean(baseline_points, axis = (3,4))
-            baseline = np.expand_dims(np.expand_dims(baseline, axis = 3), axis = 4)
-            
-            new_dff = (brain_trial_matrix[:,:,:,pull_inds,:] - baseline) / baseline
-        
-            mean_resp.append(np.mean(new_dff, axis = 3))
-            std_resp.append(np.std(new_dff, axis = 3))
+            mean_resp.append(np.mean(response_dff, axis = 3))
+            std_resp.append(np.std(response_dff, axis = 3))
         
         p_values = np.stack(p_values, axis = 3) #x y z stimulus
-        sig_responses = (p_values < p_cutoff).sum(axis = 3)
-        responsive_voxels = sig_responses > significant_stimuli
-        
         mean_resp = np.concatenate(mean_resp, axis = 3)
         std_resp = np.concatenate(std_resp, axis = 3)
         
-        #turn nonresponsive voxels to nan
-        mean_resp[~responsive_voxels] = np.nan
-        std_resp[~responsive_voxels] = np.nan
-        
-        return mean_resp, std_resp, unique_parameter_values
+        return mean_resp, std_resp, p_values, unique_parameter_values
+    
+    def nonresponsiveVoxelsToNan(self, response_matrix, p_values, p_cutoff = 0.01, significant_stimuli = 3):
+        sig_responses = (p_values < p_cutoff).sum(axis = 3)
+        responsive_voxels = sig_responses > significant_stimuli
+        response_matrix[~responsive_voxels] = np.nan
+
+        return response_matrix
+
         
 # %%        
     ##############################################################################
