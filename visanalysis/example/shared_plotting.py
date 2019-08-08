@@ -4,16 +4,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # AODscope poi data:
-file_name = '2019-06-28'
-series_number = 3
-ImagingData = AodScopeData.ImagingDataObject(file_name, series_number)
-roi_name = 'axon'
+# file_name = '2019-06-28'
+# series_number = 3
+# ImagingData = AodScopeData.ImagingDataObject(file_name, series_number)
+# roi_name = 'axon'
 
 # Bruker data:
-# file_name = '2018-11-06'
-# series_number = 9
-# ImagingData = BrukerData.ImagingDataObject(file_name, series_number)
-# roi_name = 'multi_dendrite'
+file_name = '2018-11-06'
+series_number = 9
+ImagingData = BrukerData.ImagingDataObject(file_name, series_number)
+roi_name = 'multi_dendrite'
 
 
 # %%
