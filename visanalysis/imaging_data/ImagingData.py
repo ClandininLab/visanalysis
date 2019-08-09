@@ -24,7 +24,7 @@ class ImagingDataObject():
         path_to_config_file = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0], 'visanalysis', 'config', 'config.yaml')
         with open(path_to_config_file, 'r') as ymlfile:
             cfg = yaml.safe_load(ymlfile)
-        
+
         self.file_name = file_name
         self.series_number = series_number
         if os.path.isdir(os.path.join(cfg['data_directory'], file_name.replace('-',''))): #sub-dirs for expt days
@@ -32,16 +32,16 @@ class ImagingDataObject():
         else:
             self.image_data_directory = cfg['data_directory']
         self.flystim_data_directory = cfg['flystim_data_directory']
-        
+
          # Get stimulus metadata from Flystim hdf5 file
         self.epoch_parameters, self.run_parameters, self.notes = self.__getEpochGroupMetadata()
 
         self.colors = sns.color_palette("deep",n_colors = 20)
-        
-# %% 
+
+# %%
     ##############################################################################
     #Functions for computing stimulus timing and stimulus-aligning trial responses
-    ##############################################################################        
+    ##############################################################################
     def getEpochResponseMatrix(self, respose_trace = None):
         """
         getEpochReponseMatrix(self, roi_response = None)
@@ -54,26 +54,26 @@ class ImagingDataObject():
         """
         if respose_trace is None:
             respose_trace = np.vstack(self.roi_response)
-        
+
         stimulus_start_times = self.stimulus_timing['stimulus_start_times'] #sec
         stimulus_end_times = self.stimulus_timing['stimulus_end_times'] #sec
         pre_time = self.run_parameters['pre_time'] #sec
         tail_time = self.run_parameters['tail_time'] #sec
         epoch_start_times = stimulus_start_times - pre_time
         epoch_end_times = stimulus_end_times +  tail_time
-    
+
         sample_period = self.response_timing['sample_period'] #sec
         stack_times = self.response_timing['stack_times'] #sec
-    
+
         # Use measured stimulus lengths for stim time instead of epoch param
         # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
         epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times) #sec
-        
+
         # find how many acquisition frames correspond to pre, stim, tail time
         epoch_frames = int(epoch_time / sample_period) #in acquisition frames
         pre_frames = int(pre_time / sample_period) #in acquisition frames
         time_vector = np.arange(0,epoch_frames) * sample_period # sec
-        
+
         no_trials = len(epoch_start_times)
         no_rois = respose_trace.shape[0]
         response_matrix = np.empty(shape=(no_rois, no_trials, epoch_frames), dtype=float)
@@ -93,48 +93,48 @@ class ImagingDataObject():
                     continue
             #pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
             new_resp_chunk = respose_trace[:,stack_inds]
-    
+
             # calculate baseline using pre frames
             baseline = np.mean(new_resp_chunk[:,0:pre_frames], axis = 1, keepdims = True)
             # to dF/F
             new_resp_chunk = (new_resp_chunk - baseline) / baseline;
             response_matrix[:,idx,:] = new_resp_chunk[:,0:epoch_frames]
-            
+
         response_matrix = np.delete(response_matrix,cut_inds, axis = 1)
         return time_vector, response_matrix
 
     def getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate,
                                plot_trace_flag = True,
-                               threshold = 0.6, 
+                               threshold = 0.6,
                                minimum_epoch_separation = 2e3, # datapoints
                                frame_slop = 10, #datapoints +/- ideal frame duration
                                command_frame_rate = 120):
         """
         getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate)
             returns stimulus timing information based on photodiode voltage trace from alternating frame tracker signal
-        
+
         """
         # Low-pass filter frame_monitor trace
         b, a = signal.butter(4, 10*command_frame_rate, btype = 'low', fs = sample_rate)
         frame_monitor = signal.filtfilt(b, a, frame_monitor)
-        
+
         # shift & normalize so frame monitor trace lives on [0 1]
         frame_monitor = frame_monitor - np.min(frame_monitor)
         frame_monitor = frame_monitor / np.max(frame_monitor)
-        
+
         # find lightcrafter frame flip times
         V_orig = frame_monitor[0:-2]
         V_shift = frame_monitor[1:-1]
         ups = np.where(np.logical_and(V_orig < threshold, V_shift >= threshold))[0] + 1
         downs = np.where(np.logical_and(V_orig >= threshold, V_shift < threshold))[0] + 1
         frame_times = np.sort(np.append(ups,downs))
-        
+
         # Use frame flip times to find stimulus start times
         stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
         stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
         stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
         stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
-        
+
         # Find dropped frames and calculate frame rate
         interval_duration = np.diff(frame_times)
         frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
@@ -145,7 +145,7 @@ class ImagingDataObject():
         good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)<frame_slop)[0]
         measured_frame_len = np.mean(frame_len[good_frame_inds]) #datapoints
         frame_rate = 1 / (measured_frame_len / sample_rate) #Hz
-        
+
         if plot_trace_flag:
             pylab.plot(time_vector,frame_monitor)
             pylab.plot(time_vector[frame_times],threshold * np.ones(frame_times.shape),'ko')
@@ -153,12 +153,12 @@ class ImagingDataObject():
             pylab.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
             pylab.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
             pylab.show
-        
+
         return {'frame_times':frame_times, 'stimulus_end_times':stimulus_end_times,
                 'stimulus_start_times':stimulus_start_times, 'dropped_frame_inds':dropped_frame_inds,
                 'frame_rate':frame_rate}
-        
-# %% 
+
+# %%
     ##############################################################################
     #Methods for handling roi saving/loading and generating roi responses:
     ##############################################################################
@@ -168,7 +168,7 @@ class ImagingDataObject():
             # epoch run group
             series_group = experiment_file['/epoch_runs'].get(str(self.series_number))
             roi_parent_group = series_group.require_group("rois") #opens group if it exists or creates it if it doesn't
-            
+
             current_roi_group = roi_parent_group.require_group(roi_set_name)
             if current_roi_group.get("roi_mask"): #roi dataset exists
                 del current_roi_group["roi_mask"]
@@ -176,17 +176,17 @@ class ImagingDataObject():
                 del current_roi_group["roi_response"]
             if current_roi_group.get("roi_image"):
                 del current_roi_group["roi_image"]
-                
+
             for dataset_key in current_roi_group.keys():
                 if 'path_vertices' in dataset_key:
                     del current_roi_group[dataset_key]
-                  
+
             current_roi_group.create_dataset("roi_mask", data = self.roi_mask)
             current_roi_group.create_dataset("roi_response", data = self.roi_response)
             current_roi_group.create_dataset("roi_image", data = self.roi_image)
             for p_ind, p in enumerate(self.roi_path):
                 current_roi_group.create_dataset("path_vertices_" + str(p_ind), data = p.vertices)
- 
+
     def loadRois(self, roi_set_name):
         print('Loading roi set  {}...'.format(roi_set_name))
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
@@ -195,14 +195,14 @@ class ImagingDataObject():
                 roi_name = roi_set_name.split(':')[1]
                 roi_set_group = experiment_file['/epoch_runs'].get(series_no).get('rois').get(roi_name)
                 compute_roi_response = True
-                
+
             else: #from this series
                 roi_set_group = experiment_file['/epoch_runs'].get(str(self.series_number)).get('rois').get(roi_set_name)
                 compute_roi_response = False
-                
+
             # load the roi path  and mask
             self.roi_mask = list(roi_set_group.get("roi_mask")[:]) #load from hdf5 metadata file
-            
+
             self.roi_path = []
             new_path = roi_set_group.get("path_vertices_0")
             ind = 0
@@ -210,9 +210,9 @@ class ImagingDataObject():
                 self.roi_path.append(new_path)
                 ind += 1
                 new_path = roi_set_group.get("path_vertices_" + str(ind))
-                
+
             self.roi_path = [x[:] for x in self.roi_path]
-                
+
             if compute_roi_response:
                 self.roi_response = [self.getRoiDataFromMask(x) for x in self.roi_mask]
             else: #just load directly from h5 file
@@ -241,10 +241,10 @@ class ImagingDataObject():
                             roi_image = roi_set_group.get("roi_image")[:]
                             if roi_image.shape == target_shape:
                                 roi_set_names.append(prefix+roi_set)
-        
+
         return roi_set_names
-    
-    
+
+
     def getRoiMask(self, indices):
         array = np.zeros((self.roi_image.shape[0], self.roi_image.shape[1]))
         lin = np.arange(array.size)
@@ -253,17 +253,17 @@ class ImagingDataObject():
         newRoiArray = newRoiArray.reshape(array.shape)
 
         mask = newRoiArray == 1 #convert to boolean for masking
-        
+
         return mask
-    
+
     def getRoiDataFromMask(self,mask):
         newRoiResp = (np.mean(self.current_series[:,mask], axis = 1, keepdims=True) -
                    np.min(self.current_series)).T
-                      
-        return newRoiResp
-        
 
-# %%        
+        return newRoiResp
+
+
+# %%
     ##############################################################################
     #Misc utils:
     ##############################################################################
@@ -281,25 +281,25 @@ class ImagingDataObject():
             cell_type_code = 'LC9'
         else:
             cell_type_code = cell_type[0:4]
-            
+
         if indicator == 'SF-iGluSnFR.A184V':
             indicator_code = 'SFiGSFR'
         elif indicator == '10_90_GCaMP6f':
             indicator_code = '1090_GC6f'
         else:
             indicator_code = indicator.replace('.','').replace('-','').replace(' ','')
-    
+
         name_suffix = cell_type_code + '_' + indicator_code + '_'
         return name_suffix
 
     def getSeriesIDSuffix(self):
         return self.file_name.replace('-','') + '_' + str(self.series_number)
-    
-# %%    
+
+# %%
     ##############################################################################
     #Private functions for reading visprotocol metadata
     ##############################################################################
-    
+
     def __getEpochGroupMetadata(self):
         """
         For reading stimulus metadata from visprotocol data file
@@ -308,12 +308,12 @@ class ImagingDataObject():
         with h5py.File(os.path.join(self.flystim_data_directory, self.file_name) + '.hdf5','r') as experiment_file:
             # Notes from entire file
             notes = addAttributesToDictionary(experiment_file['/notes'], {})
-        
+
             # epoch run group
             series_group = experiment_file['/epoch_runs'][str(self.series_number)]
             # get epoch group attributes (run parameters)
             run_parameters = addAttributesToDictionary(series_group, {})
-            
+
             epoch_parameters = []
             for epoch in series_group:
                 # Collapse all levels of epoch parameters into a single dict
@@ -326,15 +326,15 @@ class ImagingDataObject():
                     new_epoch_params = addAttributesToDictionary(series_group[epoch + '/epoch_parameters'], new_epoch_params)
                     new_epoch_params = addAttributesToDictionary(series_group[epoch + '/convenience_parameters'], new_epoch_params)
                     epoch_parameters.append(new_epoch_params)
-                
+
             # sort epochs by start time
-            epoch_parameters = sorted(epoch_parameters, key=itemgetter('epoch_time')) 
-            
+            epoch_parameters = sorted(epoch_parameters, key=itemgetter('epoch_time'))
+
         return epoch_parameters, run_parameters, notes
-    
-    
-    
-    def __checkEpochNumberCount(self):          
+
+
+
+    def __checkEpochNumberCount(self):
         flystim_epochs = len(self.epoch_parameters)
         presented_epochs = len(self.stimulus_timing['stimulus_start_times'])
         if not flystim_epochs == presented_epochs:
