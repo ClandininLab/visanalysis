@@ -28,15 +28,19 @@ from visanalysis import roi, plot_tools, plugin
 
 class DataGUI(QWidget):
 
-    def __init__(self, roi_type='freehand', roi_radius=None):
+    def __init__(self):
         super().__init__()
 
         self.experiment_file_name = None
         self.experiment_file_directory = None
         self.data_directory = None
         self.max_rois = 12
-        self.roi_type = roi_type
-        self.roi_radius = roi_radius
+        self.roi_type = 'freehand'
+        self.roi_radius = None
+
+        self.roi_response = []
+        self.roi_mask = []
+        self.roi_path = []
 
         self.colors = sns.color_palette("deep",n_colors = 20)
 
@@ -142,13 +146,10 @@ class DataGUI(QWidget):
         self.clearROIsButton.clicked.connect(self.clearRois)
         self.roi_control_grid.addWidget(self.clearROIsButton, 0, 2)
 
-        # Available ROIs combobox
-        self.RoiComboBox = QComboBox(self)
-        self.RoiComboBox.activated.connect(self.loadRois)
-        self.RoiComboBox.addItem("(select an ROI set)")
-        # for roi_set in roi.getAvailableROIsets():
-        #     self.RoiComboBox.addItem(roi_set)
-        self.roi_control_grid.addWidget(self.RoiComboBox, 1, 0)
+        # Delete current roi button
+        self.deleteROIButton = QPushButton("Delete ROI", self)
+        self.deleteROIButton.clicked.connect(self.deleteRoi)
+        self.roi_control_grid.addWidget(self.deleteROIButton, 1, 2)
 
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
@@ -158,13 +159,14 @@ class DataGUI(QWidget):
         # Save ROIs button
         self.saveROIsButton = QPushButton("Save ROIs", self)
         self.saveROIsButton.clicked.connect(self.saveRois)
-        self.roi_control_grid.addWidget(self.saveROIsButton, 1, 2)
+        self.roi_control_grid.addWidget(self.saveROIsButton, 1, 0)
 
         # TODO: slider for roi / poi index
         self.roiSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.roiSlider.setMinimum(0)
+        self.roiSlider.setMaximum(self.max_rois)
+        self.roiSlider.valueChanged.connect(self.redrawRoiTraces)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 2)
-
-
 
         self.responsePlot = PlotWidget()
         self.plot_grid.addWidget(self.responsePlot, 0, 0)
@@ -227,10 +229,9 @@ class DataGUI(QWidget):
         self.group_dset_dict = get_hierarchy(file_path)
         # Load Group dropdown box
         self.comboBoxGroupSelect.clear()
+        exclusions = ['epochs', 'stimulus_timing', 'acquisition']
         for key in self.group_dset_dict:
-            if 'epochs' in key:
-                pass
-            elif 'stimulus_timing' in key:
+            if np.any([x in key for x in exclusions]):
                 pass
             else:
                 self.comboBoxGroupSelect.addItem(key)
@@ -289,16 +290,18 @@ class DataGUI(QWidget):
             parent = ''
 
         if parent == 'rois':  # selected node is an existing roi set
-            print('roi set')
+            roi_set_name = group_path.split('/')[-1]
+            print('Selected roi set {}'.format(roi_set_name))
+            self.le_roiSetName.setText(roi_set_name)
             self.loadRois()
             self.refreshLassoWidget(self.roi_image)
             self.redrawRoiTraces()
         elif 'series_' in group_path:  # selected node is within a series group
-            print('selected series')
-            series_number = int(group_path.split('series_')[-1].split('/')[0])
+            self.series_number = int(group_path.split('series_')[-1].split('/')[0])
+            print('selected series {}'.format(self.series_number))
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.current_series = self.plugin.loadImageSeries(self.experiment_file_name, self.data_directory, series_number)
-                self.roi_image = np.mean(self.current_series, axis=2)
+                self.current_series = self.plugin.loadImageSeries(self.experiment_file_name, self.data_directory, self.series_number)
+                self.roi_image = np.mean(self.current_series, axis=0) #avg across time
                 self.refreshLassoWidget(self.roi_image)
 
             else:
@@ -335,8 +338,8 @@ class DataGUI(QWidget):
 
         radiusX = np.sqrt((x1 - x2)**2)/2
         radiusY = np.sqrt((y1 - y2)**2)/2
-        if self.roiRadius is not None:
-            radiusX = self.roiRadius
+        if self.roi_radius is not None:
+            radiusX = self.roi_radius
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         new_roi_path = path.Path.circle(center = center, radius = radiusX)
@@ -346,7 +349,7 @@ class DataGUI(QWidget):
 
     def updateRoiSelection(self, ind, path):
         mask = roi.getRoiMask(self.roi_image, ind)
-        self.new_roi_resp = roi.getRoiDataFromMask(current_series, mask)
+        self.new_roi_resp = roi.getRoiDataFromMask(self.current_series, mask)
 
         #update list of roi data
         self.roi_mask.append(mask)
@@ -357,16 +360,18 @@ class DataGUI(QWidget):
         self.redrawRoiTraces()
 
     def redrawRoiTraces(self):
-        roiIndex = 0
+        current_roi_index = self.roiSlider.value()
         self.responsePlot.clear()
-        penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[roiIndex]]))
-        self.responsePlot.plot(np.squeeze(self.roi_response[roiIndex].T), pen=penStyle )
+        if current_roi_index < len(self.roi_response):
+            penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[current_roi_index]]))
+            self.responsePlot.plot(np.squeeze(self.roi_response[current_roi_index].T), pen=penStyle)
 
         if len(self.roi_mask) > 0:
             newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask , 0.5, self.colors)
         else:
             newImage = self.roi_image
-        # self.show()
+
+        self.refreshLassoWidget(newImage)
 
 
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
@@ -378,21 +383,35 @@ class DataGUI(QWidget):
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
-
-        roi.saveRoiSet(file_path, roi_set_path, roi_response, roi_image, roi_path, roi_mask)
+        roi.saveRoiSet(file_path, series_number=self.series_number,
+                     roi_set_name=roi_set_name,
+                     roi_mask=self.roi_mask,
+                     roi_response=self.roi_response,
+                     roi_image=self.roi_image,
+                     roi_path=self.roi_path)
+        print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
 
     def deleteRoi(self):
-        pass
+        current_roi_index = self.roiSlider.value()
+        self.roi_mask.pop(current_roi_index)
+        self.roi_response.pop(current_roi_index)
+        self.roi_path.pop(current_roi_index)
+        self.redrawRoiTraces()
 
     def clearRois(self):
-        pass
+        self.roi_mask = []
+        self.roi_response = []
+        self.roi_path = []
+        self.responsePlot.clear()
+        self.redrawRoiTraces()
 
     def selectRoiType(self):
-        pass
-
-
-
-
+        self.roi_type = self.RoiTypeComboBox.currentText().split(':')[0]
+        if 'circle' in self.RoiTypeComboBox.currentText():
+            self.roi_radius = int(self.RoiTypeComboBox.currentText().split(':')[1])
+        else:
+            self.roi_radius = None
+        self.redrawRoiTraces()
 
 
 if __name__ == '__main__':

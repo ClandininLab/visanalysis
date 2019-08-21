@@ -73,11 +73,10 @@ class BasePlugin():
                 'stimulus_start_times':stimulus_start_times, 'dropped_frame_inds':dropped_frame_inds,
                 'frame_rate':frame_rate}
 
-    def overwriteDataSet(self, group, name, data):
-        if group.get(name):
-            del group[name]
-        group.create_dataset(name, data=data)
-
+def overwriteDataSet(group, name, data):
+    if group.get(name):
+        del group[name]
+    group.create_dataset(name, data=data)
 
 def getDataType(file_path):
     with h5py.File(file_path, 'r+') as experiment_file:

@@ -1,28 +1,36 @@
 import numpy as np
 import h5py
+import functools
+from visanalysis import plugin
 
 
+def saveRoiSet(file_path, series_number,
+             roi_set_name,
+             roi_mask,
+             roi_response,
+             roi_image,
+             roi_path):
 
-def saveRoiSet(file_path, roi_set_path, roi_response, roi_image, roi_path, roi_mask):
+    def find_series(name, obj, sn):
+        target_group_name = 'series_{}'.format(str(sn).zfill(3))
+        if target_group_name in name:
+            return obj
+
     with h5py.File(file_path, 'r+') as experiment_file:
-        roi_group = experiment_file.require_group(roi_set_path)
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        parent_roi_group = epoch_run_group.require_group('rois')
+        current_roi_group = parent_roi_group.require_group(roi_set_name)
 
-        if roi_group.get("roi_mask"):  # roi dataset exists
-            del roi_group["roi_mask"]
-        if roi_group.get("roi_response"):
-            del roi_group["roi_response"]
-        if roi_group.get("roi_image"):
-            del roi_group["roi_image"]
+        plugin.base.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
+        plugin.base.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
+        plugin.base.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
 
-        for dataset_key in roi_group.keys():
+        for dataset_key in current_roi_group.keys():
             if 'path_vertices' in dataset_key:
-                del roi_group[dataset_key]
-
-        roi_group.create_dataset("roi_mask", data=roi_mask)
-        roi_group.create_dataset("roi_response", data=roi_response)
-        roi_group.create_dataset("roi_image", data=roi_image)
+                del current_roi_group[dataset_key]
         for p_ind, p in enumerate(roi_path):
-            roi_group.create_dataset("path_vertices_" + str(p_ind), data=p.vertices)
+            current_roi_group.create_dataset("path_vertices_" + str(p_ind), data = p.vertices)
 
 
 def loadRoiSet(file_path, roi_set_path):
@@ -61,6 +69,7 @@ def getRoiMask(image, indices):
     newRoiArray = newRoiArray.reshape(array.shape)
     mask = newRoiArray == 1 #convert to boolean for masking
     return mask
+
 
 def getRoiDataFromMask(current_series, mask):
     roi_response = (np.mean(current_series[:, mask], axis=1, keepdims=True) - np.min(current_series)).T

@@ -42,7 +42,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         else:
             print('File not found at {}'.format(raw_file_path))
 
-        return current_series
+        return current_series #tyx
 
     def registerStack(self, current_series, response_timing):
         """
@@ -111,14 +111,14 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
                 #make sure subgroups exist for stimulus and response timing
                 stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                self.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
-                self.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                 stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                 acquisition_group = epoch_run_group.require_group('acquisition')
-                self.overwriteDataSet(acquisition_group, 'stack_times', response_timing['stack_times'])
+                plugin.base.overwriteDataSet(acquisition_group, 'stack_times', response_timing['stack_times'])
                 if 'frame_times' in response_timing:
-                    self.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
+                    plugin.base.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
                 acquisition_group.attrs['sample_period'] = response_timing['sample_period']
 
                 for key in metadata:
