@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider)
 import PyQt5.QtCore as QtCore
+from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
@@ -42,7 +43,7 @@ class DataGUI(QWidget):
         self.roi_mask = []
         self.roi_path = []
 
-        self.colors = sns.color_palette("deep",n_colors = 20)
+        self.colors = sns.color_palette("deep", n_colors = 20)
 
         self.initUI()
 
@@ -87,7 +88,6 @@ class DataGUI(QWidget):
         attachDatabutton = QPushButton("Attach data to file", self)
         attachDatabutton.clicked.connect(self.attachData)
         self.file_control_grid.addWidget(attachDatabutton, 2, 1)
-
 
         # # # # Attribute browser: # # # # # # # #
         # Heavily based on QtHdfLoad from LazyHDF5
@@ -161,7 +161,12 @@ class DataGUI(QWidget):
         self.saveROIsButton.clicked.connect(self.saveRois)
         self.roi_control_grid.addWidget(self.saveROIsButton, 1, 0)
 
-        # TODO: slider for roi / poi index
+        # Delete current roi button
+        self.deleteROIButton = QPushButton("Delete ROI", self)
+        self.deleteROIButton.clicked.connect(self.deleteRoi)
+        self.roi_control_grid.addWidget(self.deleteROIButton, 2, 0)
+
+        # Current roi slider
         self.roiSlider = QSlider(QtCore.Qt.Horizontal, self)
         self.roiSlider.setMinimum(0)
         self.roiSlider.setMaximum(self.max_rois)
@@ -214,9 +219,22 @@ class DataGUI(QWidget):
             self.plugin = plugin.base.BasePlugin()
 
     def registerStacks(self):
-        # TODO: spin this up in a separate thread maybe
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.plugin.registerAndSaveStacks(self.experiment_file_name, file_path, self.data_directory)
+        self.registerStacksThread = registerStacksThread(plugin=self.plugin,
+                                                         experiment_file_name=self.experiment_file_name,
+                                                         file_path=file_path,
+                                                         data_directory=self.data_directory)
+
+        self.registerStacksThread.finished.connect(lambda: self.finishedRegistration())
+        self.registerStacksThread.started.connect(lambda: self.startedRegistration())
+
+        self.registerStacksThread.start()
+
+    def startedRegistration(self):
+        print('Registering stacks...')
+
+    def finishedRegistration(self):
+        print('Stacks registered')
 
     def attachData(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -412,6 +430,26 @@ class DataGUI(QWidget):
         else:
             self.roi_radius = None
         self.redrawRoiTraces()
+
+
+class registerStacksThread(QThread):
+    # https://nikolak.com/pyqt-threading-tutorial/
+    # https://stackoverflow.com/questions/41848769/pyqt5-object-has-no-attribute-connect
+    def __init__(self, plugin, experiment_file_name, file_path, data_directory):
+        QThread.__init__(self)
+        self.plugin = plugin
+        self.experiment_file_name = experiment_file_name
+        self.file_path = file_path
+        self.data_directory = data_directory
+
+    def __del__(self):
+        self.wait()
+
+    def _startReg(self):
+        self.plugin.registerAndSaveStacks(self.experiment_file_name, self.file_path, self.data_directory)
+
+    def run(self):
+        self._startReg()
 
 
 if __name__ == '__main__':
