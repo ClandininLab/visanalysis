@@ -18,6 +18,7 @@ setup(
         'thunder-registration',
         'seaborn',
         'pyqtgraph'],
+    dependency_links=['https://github.com/mhturner/LazyHDF5/tarball/master'],
     include_package_data=True,
     zip_safe=False,
 )
