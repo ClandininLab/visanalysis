@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 import functools
 from visanalysis import plugin
+from matplotlib import path
 
 
 def saveRoiSet(file_path, series_number,
@@ -56,10 +57,24 @@ def loadRoiSet(file_path, roi_set_path):
                 roi_path.append(new_path)
                 ind += 1
                 new_path = roi_set_group.get("path_vertices_" + str(ind))
-            roi_path = [x[:] for x in roi_path]
+            roi_path = [x[:] for x in roi_path]  # path vertices
+            roi_path = [path.Path(x) for x in roi_path]  # convert from verts to path object
 
     return roi_response, roi_image, roi_path, roi_mask
 
+
+def removeRoiSet(file_path, series_number, roi_set_name):
+    def find_series(name, obj, sn):
+        target_group_name = 'series_{}'.format(str(sn).zfill(3))
+        if target_group_name in name:
+            return obj
+
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        rois_group = epoch_run_group.get('rois')
+        del rois_group[roi_set_name]
+        print('Roi group {} from series {} deleted'.format(roi_set_name, series_number))
 
 def getRoiMask(image, indices):
     array = np.zeros((image.shape[0], image.shape[1]))

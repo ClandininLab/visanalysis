@@ -23,8 +23,11 @@ import numpy as np
 import os
 from lazy5.inspect import get_hierarchy, get_attrs_group
 from lazy5 import alter
+import inspect
+import skimage.io as io
 
 from visanalysis import roi, plot_tools, plugin
+import visanalysis
 
 
 class DataGUI(QWidget):
@@ -39,9 +42,17 @@ class DataGUI(QWidget):
         self.roi_type = 'freehand'
         self.roi_radius = None
 
+        self.current_series = None
         self.roi_response = []
         self.roi_mask = []
         self.roi_path = []
+        self.roi_image = []
+
+        img_path = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0],
+                                'visanalysis',
+                                'resources',
+                                'clandinin_stainedglass.png')
+        self.clandinin_logo = current_series = io.imread(img_path)
 
         self.colors = sns.color_palette("deep", n_colors = 20)
 
@@ -146,10 +157,10 @@ class DataGUI(QWidget):
         self.clearROIsButton.clicked.connect(self.clearRois)
         self.roi_control_grid.addWidget(self.clearROIsButton, 0, 2)
 
-        # Delete current roi button
-        self.deleteROIButton = QPushButton("Delete ROI", self)
-        self.deleteROIButton.clicked.connect(self.deleteRoi)
-        self.roi_control_grid.addWidget(self.deleteROIButton, 1, 2)
+        # Delete roi set button
+        self.removeRoiSetButton = QPushButton("Remove ROI set", self)
+        self.removeRoiSetButton.clicked.connect(self.removeRoiSet)
+        self.roi_control_grid.addWidget(self.removeRoiSetButton, 1, 2)
 
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
@@ -290,6 +301,8 @@ class DataGUI(QWidget):
         print('Changed attr {} to = {}'.format(attr_key, attr_val))
 
     def groupChange(self):  # Qt-related pylint: disable=C0103
+        self.clearRois()
+
         group_path = self.comboBoxGroupSelect.currentText()
         if group_path != '':
             file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -307,41 +320,54 @@ class DataGUI(QWidget):
         else:
             parent = ''
 
-        if parent == 'rois':  # selected node is an existing roi set
-            roi_set_name = group_path.split('/')[-1]
-            print('Selected roi set {}'.format(roi_set_name))
-            self.le_roiSetName.setText(roi_set_name)
-            self.loadRois()
-            self.refreshLassoWidget(self.roi_image)
-            self.redrawRoiTraces()
-        elif 'series_' in group_path:  # selected node is within a series group
+        if 'series_' in group_path:  # selected node is within a series group
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
             print('selected series {}'.format(self.series_number))
+
             if self.data_directory is not None:  # user has selected a raw data directory
                 self.current_series = self.plugin.loadImageSeries(self.experiment_file_name, self.data_directory, self.series_number)
-                self.roi_image = np.mean(self.current_series, axis=0) #avg across time
-                self.refreshLassoWidget(self.roi_image)
-
+                self.getNewRoiImage()
+                self.refreshLassoWidget()
             else:
-                print('Select a data directory first')
+                print('Select a data directory before attaching new data')
+
+            if parent == 'rois':  # selected node is an existing roi set
+                roi_set_name = group_path.split('/')[-1]
+                self.series_number = int(group_path.split('series_')[-1].split('/')[0])
+                print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
+                self.le_roiSetName.setText(roi_set_name)
+                self.loadRois()
+                self.refreshLassoWidget()
+                self.redrawRoiTraces()
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #
 
-    def refreshLassoWidget(self, image):
-        self.roi_ax.imshow(image, cmap=cm.gray)
+    def refreshLassoWidget(self):
+        self.roi_ax.clear()
+        init_lasso = False
+        if len(self.roi_image) > 0:
+            if len(self.roi_mask) > 0:
+                newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask , 0.5, self.colors)
+            else:
+                newImage = self.roi_image
+            self.roi_ax.imshow(newImage, cmap=cm.gray)
+            init_lasso = True
+        else:
+            self.roi_ax.imshow(self.clandinin_logo)
+
         self.roi_canvas.draw()
 
-        # Pixel coordinates of lasso selector
-        pixX = np.arange(image.shape[1])
-        pixY = np.arange(image.shape[0])
-        yv, xv = np.meshgrid(pixX, pixY)
-        self.roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
-        if self.roi_type == 'circle':
-            self.lasso = EllipseSelector(self.roi_ax, self.onselectEllipse)
-        elif self.roi_type == 'freehand':
-            self.lasso = LassoSelector(self.roi_ax, self.onselectFreehand)
-        else:
-            print('Warning ROI type not recognized. Choose circle or freehand')
+        if init_lasso:
+            pixX = np.arange(self.roi_image.shape[1])
+            pixY = np.arange(self.roi_image.shape[0])
+            yv, xv = np.meshgrid(pixX, pixY)
+            self.roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
+            if self.roi_type == 'circle':
+                self.lasso = EllipseSelector(self.roi_ax, self.onselectEllipse)
+            elif self.roi_type == 'freehand':
+                self.lasso = LassoSelector(self.roi_ax, self.onselectFreehand)
+            else:
+                print('Warning ROI type not recognized. Choose circle or freehand')
 
     def onselectFreehand(self, verts):
         new_roi_path = path.Path(verts)
@@ -377,6 +403,12 @@ class DataGUI(QWidget):
         # Update figures
         self.redrawRoiTraces()
 
+    def getNewRoiImage(self):
+        if self.current_series is not None:
+            self.roi_image = np.mean(self.current_series, axis=0)  # avg across time
+        else:
+            self.roi_image = []
+
     def redrawRoiTraces(self):
         current_roi_index = self.roiSlider.value()
         self.responsePlot.clear()
@@ -384,12 +416,7 @@ class DataGUI(QWidget):
             penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[current_roi_index]]))
             self.responsePlot.plot(np.squeeze(self.roi_response[current_roi_index].T), pen=penStyle)
 
-        if len(self.roi_mask) > 0:
-            newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask , 0.5, self.colors)
-        else:
-            newImage = self.roi_image
-
-        self.refreshLassoWidget(newImage)
+        self.refreshLassoWidget()
 
 
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
@@ -408,6 +435,7 @@ class DataGUI(QWidget):
                      roi_image=self.roi_image,
                      roi_path=self.roi_path)
         print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
+        self.populateGroups()
 
     def deleteRoi(self):
         current_roi_index = self.roiSlider.value()
@@ -416,12 +444,20 @@ class DataGUI(QWidget):
         self.roi_path.pop(current_roi_index)
         self.redrawRoiTraces()
 
+    def removeRoiSet(self):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        roi_set_name = self.le_roiSetName.text()
+        roi.removeRoiSet(file_path, self.series_number, roi_set_name)
+        self.populateGroups()
+
     def clearRois(self):
         self.roi_mask = []
         self.roi_response = []
         self.roi_path = []
+        self.roi_image = []
         self.responsePlot.clear()
         self.redrawRoiTraces()
+        self.roi_ax.clear()
 
     def selectRoiType(self):
         self.roi_type = self.RoiTypeComboBox.currentText().split(':')[0]
