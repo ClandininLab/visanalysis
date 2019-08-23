@@ -5,20 +5,17 @@ Created on Fri May 31 09:43:59 2019
 @author: mhturner
 """
 import os
-import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
 import h5py
 import skimage.io as io
 from registration import CrossCorr
-import matplotlib.patches as patches
 from tifffile import imsave
 import functools
 
 
 from visanalysis import plugin
-from visanalysis import plot_tools
 
 ##############################################################################
 # Functions for image series data from bruker / PV
