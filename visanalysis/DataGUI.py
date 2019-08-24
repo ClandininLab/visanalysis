@@ -15,7 +15,8 @@ import matplotlib.cm as cm
 import pyqtgraph as pg
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
-                             QTableWidget, QTableWidgetItem, QToolBar, QSlider)
+                             QTableWidget, QTableWidgetItem, QToolBar, QSlider,
+                             QTreeView)
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
@@ -103,6 +104,19 @@ class DataGUI(QWidget):
         # # # # Attribute browser: # # # # # # # #
         # Heavily based on QtHdfLoad from LazyHDF5
         # Group selection combobox
+        # self.groupTree = QTreeView(self)
+        # self.file_control_grid.addWidget(self.groupTree, 3, 0, 2, 2)
+        # tree = {'root': {
+        #             "1": ["A", "B", "C"],
+        #             "2": {
+        #                 "2-1": ["G", "H", "I"],
+        #                 "2-2": ["J", "K", "L"]},
+        #             "3": ["D", "E", "F"]}
+        # }
+        # root_model = QtGui.QStandardItemModel()
+        #
+        # self._populateTree(tree, root_model.invisibleRootItem())
+
         self.comboBoxGroupSelect = QComboBox()
         self.comboBoxGroupSelect.currentTextChanged.connect(self.groupChange)
         self.file_control_grid.addWidget(self.comboBoxGroupSelect, 3, 0, 1, 2)
@@ -203,6 +217,14 @@ class DataGUI(QWidget):
         self.setGeometry(200, 200, 1200, 600)
         self.show()
 
+    def _populateTree(self, children, parent):
+        for child in sorted(children):
+            print(child)
+            child_item = QtGui.QStandardItem(child)
+            parent.appendRow(child_item)
+            if type(children) is dict:
+                self._populateTree(children[child], child_item)
+
     def selectDataFile(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Open file")
         self.experiment_file_name = os.path.split(filePath)[1].split('.')[0]
@@ -225,7 +247,7 @@ class DataGUI(QWidget):
         if data_type == 'Bruker':
             self.plugin = plugin.bruker.BrukerPlugin()
         elif data_type == 'AODscope':
-            pass #TODO: make plugin
+            self.plugin = plugin.aodscope.AodScopePlugin()
         else:
             self.plugin = plugin.base.BasePlugin()
 
@@ -248,9 +270,12 @@ class DataGUI(QWidget):
         print('Stacks registered')
 
     def attachData(self):
-        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.plugin.attachData(self.experiment_file_name, file_path, self.data_directory)
-        print('Data attached')
+        if self.data_directory is not None:
+            file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+            self.plugin.attachData(self.experiment_file_name, file_path, self.data_directory)
+            print('Data attached')
+        else:
+            print('Select a data directory before attaching new data')
 
     def populateGroups(self):  # Qt-related pylint: disable=C0103
         """ Populate dropdown box of group comboBoxGroupSelect """
@@ -329,7 +354,7 @@ class DataGUI(QWidget):
                 self.getNewRoiImage()
                 self.refreshLassoWidget()
             else:
-                print('Select a data directory before attaching new data')
+                print('Select a data directory before drawing rois')
 
             if parent == 'rois':  # selected node is an existing roi set
                 roi_set_name = group_path.split('/')[-1]
