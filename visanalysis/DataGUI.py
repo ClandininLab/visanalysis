@@ -43,7 +43,6 @@ class DataGUI(QWidget):
         self.roi_type = 'freehand'
         self.roi_radius = None
 
-        self.current_series = None
         self.roi_response = []
         self.roi_mask = []
         self.roi_path = []
@@ -53,7 +52,7 @@ class DataGUI(QWidget):
                                 'visanalysis',
                                 'resources',
                                 'clandinin_stainedglass.png')
-        self.clandinin_logo = current_series = io.imread(img_path)
+        self.clandinin_logo = io.imread(img_path)
 
         self.colors = sns.color_palette("deep", n_colors = 20)
 
@@ -258,16 +257,7 @@ class DataGUI(QWidget):
                                                          file_path=file_path,
                                                          data_directory=self.data_directory)
 
-        self.registerStacksThread.finished.connect(lambda: self.finishedRegistration())
-        self.registerStacksThread.started.connect(lambda: self.startedRegistration())
-
         self.registerStacksThread.start()
-
-    def startedRegistration(self):
-        print('Registering stacks...')
-
-    def finishedRegistration(self):
-        print('Stacks registered')
 
     def attachData(self):
         if self.data_directory is not None:
@@ -350,8 +340,12 @@ class DataGUI(QWidget):
             print('selected series {}'.format(self.series_number))
 
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.current_series = self.plugin.loadImageSeries(self.experiment_file_name, self.data_directory, self.series_number)
-                self.getNewRoiImage()
+                kwargs = {'data_directory': self.data_directory,
+                          'series_number': self.series_number,
+                          'experiment_file_name': self.experiment_file_name,
+                          'file_path': file_path,
+                          'pmt': 1}
+                self.roi_image = self.plugin.getRoiImage(**kwargs)
                 self.refreshLassoWidget()
             else:
                 print('Select a data directory before drawing rois')
@@ -418,7 +412,10 @@ class DataGUI(QWidget):
 
     def updateRoiSelection(self, ind, path):
         mask = roi.getRoiMask(self.roi_image, ind)
-        self.new_roi_resp = roi.getRoiDataFromMask(self.current_series, mask)
+        self.new_roi_resp = self.plugin.getRoiDataFromMask(mask=mask,
+                                                           data_directory=self.data_directory,
+                                                           series_number=self.series_number,
+                                                           experiment_file_name=self.experiment_file_name)
 
         #update list of roi data
         self.roi_mask.append(mask)
@@ -427,12 +424,6 @@ class DataGUI(QWidget):
 
         # Update figures
         self.redrawRoiTraces()
-
-    def getNewRoiImage(self):
-        if self.current_series is not None:
-            self.roi_image = np.mean(self.current_series, axis=0)  # avg across time
-        else:
-            self.roi_image = []
 
     def redrawRoiTraces(self):
         current_roi_index = self.roiSlider.value()

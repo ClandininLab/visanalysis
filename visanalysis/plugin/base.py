@@ -8,6 +8,9 @@ class BasePlugin():
     def __init__(self):
         super().__init__()
 
+    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
+        print('No registration function defined for this plugin')
+
     def getSeriesNumbers(self, file_path):
         all_series = []
         with h5py.File(file_path, 'r') as experiment_file:

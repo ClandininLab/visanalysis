@@ -7,22 +7,60 @@ Created on Fri May 31 09:43:59 2019
 import os
 import xml.etree.ElementTree as ET
 import numpy as np
+from matplotlib import path
 import h5py
 import skimage.io as io
 import functools
 from nptdms import TdmsFile
 import configparser
 
-from visanalysis import plugin
+from visanalysis import plugin, plot_tools
 
 ##############################################################################
 # Functions for random access poi data from AODscope / Karthala
 ##############################################################################
 
+# TODO: poi picker / grouper
+# TODO: special assignment for background pois?
+# TODO: PMT 1 or 2 selection
+
 
 class AodScopePlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
+
+    def getRoiImage(self, **kwargs):
+        series_number = kwargs.get('series_number')
+        file_path = kwargs.get('file_path')
+        pmt = kwargs.get('pmt')
+        with h5py.File(file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            acquisition_group = epoch_run_group['acquisition']
+
+            snap_image = acquisition_group.get('snap_image')[:]
+            poi_locations = acquisition_group.get('poi_locations')[:]
+
+        poi_mask = []
+        pixX = np.arange(snap_image.shape[1])
+        pixY = np.arange(snap_image.shape[0])
+        yv, xv = np.meshgrid(pixX, pixY)
+        pix = np.vstack((yv.flatten(), xv.flatten())).T
+
+        for poi_loc in poi_locations:
+            center = poi_loc
+            new_roi_path = path.Path.circle(center=center, radius=2)
+            ind = new_roi_path.contains_points(pix, radius=0.5)
+
+            array = np.zeros(snap_image.shape)
+            lin = np.arange(array.size)
+            newArray = array.flatten()
+            newArray[lin[ind]] = 1
+            poi_mask.append(newArray.reshape(array.shape))
+
+        poi_overlay = plot_tools.overlayImage(snap_image, poi_mask, 1.0)
+
+        return poi_overlay
 
     def attachData(self, experiment_file_name, file_path, data_directory):
         for series_number in self.getSeriesNumbers(file_path):
@@ -33,20 +71,14 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
             # Poi data
             poi_data = self.getPoiData(data_directory,
-                                                                   series_number,
-                                                                   pmt=1)
+                                       series_number,
+                                       pmt=1)
 
             # Imaging metadata
             metadata = self.getMetaData(data_directory,
                                         series_number)
 
             # # # # Attach metadata to epoch run group in data file # # #
-
-            def find_series(name, obj, sn):
-                target_group_name = 'series_{}'.format(str(sn).zfill(3))
-                if target_group_name in name:
-                    return obj
-
             with h5py.File(file_path, 'r+') as experiment_file:
                 find_partial = functools.partial(find_series, sn=series_number)
                 epoch_run_group = experiment_file.visititems(find_partial)
@@ -81,11 +113,9 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                                                              poi_data['poi_xy'],
                                                                              pmt=1)
 
-                acquisition_group.create_dataset("poi_locations", data=poi_locations)
-                acquisition_group.create_dataset("snap_image", data = snap_image)
-                roi_map = self.getRoiMapImage(data_directory, series_number)
-                acquisition_group.create_dataset("poi_map", data = roi_map)
-
+                roi_map = self.getRoiImage(data_directory, series_number)
+                plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_locations)
+                plugin.base.overwriteDataSet(acquisition_group, "snap_image", snap_image)
 
             print('Attached data to series {}'.format(series_number))
 
@@ -104,8 +134,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 poi_data_matrix[poi_ind, :] = tdms_file.channel_data('PMT'+str(pmt), 'POI ' + str(poi_ind) + ' ')
 
             # get poi locations:
-            poi_x = [int(v) for v in tdms_file.channel_data('parameter','parameter')[21:]]
-            poi_y = [int(v) for v in tdms_file.channel_data('parameter','value')[21:]]
+            poi_x = [int(v) for v in tdms_file.channel_data('parameter', 'parameter')[21:]]
+            poi_y = [int(v) for v in tdms_file.channel_data('parameter', 'value')[21:]]
             poi_xy = np.array(list(zip(poi_x, poi_y)))
         except:
             time_points = None
@@ -190,9 +220,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return snap_image, snap_settings, poi_locations
 
-    def getRoiMapImage(self, poi_directory, poi_series_number, pmt = 1):
-        poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]
-        full_file_path = os.path.join(poi_directory, 'points', poi_name, poi_name + '_pmt' + str(pmt) + '.jpeg')
 
-        roi_image = io.imread(full_file_path)
-        return roi_image
+def find_series(name, obj, sn):
+    target_group_name = 'series_{}'.format(str(sn).zfill(3))
+    if target_group_name in name:
+        return obj

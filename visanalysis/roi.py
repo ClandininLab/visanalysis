@@ -6,11 +6,11 @@ from matplotlib import path
 
 
 def saveRoiSet(file_path, series_number,
-             roi_set_name,
-             roi_mask,
-             roi_response,
-             roi_image,
-             roi_path):
+               roi_set_name,
+               roi_mask,
+               roi_response,
+               roi_image,
+               roi_path):
 
     def find_series(name, obj, sn):
         target_group_name = 'series_{}'.format(str(sn).zfill(3))
@@ -75,6 +75,7 @@ def removeRoiSet(file_path, series_number, roi_set_name):
         rois_group = epoch_run_group.get('rois')
         del rois_group[roi_set_name]
         print('Roi group {} from series {} deleted'.format(roi_set_name, series_number))
+
 
 def getRoiMask(image, indices):
     array = np.zeros((image.shape[0], image.shape[1]))

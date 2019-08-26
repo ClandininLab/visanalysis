@@ -15,7 +15,8 @@ from tifffile import imsave
 import functools
 
 
-from visanalysis import plugin
+from visanalysis import plugin, roi
+
 
 ##############################################################################
 # Functions for image series data from bruker / PV
@@ -24,6 +25,18 @@ from visanalysis import plugin
 class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
+
+    def getRoiImage(self, **kwargs):
+        current_series = self.loadImageSeries(kwargs.get('experiment_file_name'),
+                                              kwargs.get('data_directory'),
+                                              kwargs.get('series_number'))
+        roi_image = np.mean(current_series, axis=0)  # avg across time
+        return roi_image
+
+    def getRoiDataFromMask(self, mask, data_directory, series_number, experiment_file_name):
+        current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
+        roi_resp = roi.getRoiDataFromMask(current_series, mask)
+        return roi_resp
 
     def loadImageSeries(self, experiment_file_name, data_directory, series_number):
         image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
@@ -39,7 +52,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         else:
             print('File not found at {}'.format(raw_file_path))
 
-        return current_series #tyx
+        return current_series  # tyx
 
     def registerStack(self, current_series, response_timing):
         """
@@ -61,6 +74,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         return registered_series
 
     def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
+        print('Registering stacks...')
         for series_number in self.getSeriesNumbers(file_path):
             image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
             #  Check to see if this series has already been registered
@@ -79,6 +93,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
             print('Saved: ' + save_path)
             imsave(save_path, registered_series)
+        print('Stacks registered')
 
     def attachData(self, experiment_file_name, file_path, data_directory):
         for series_number in self.getSeriesNumbers(file_path):
