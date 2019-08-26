@@ -16,7 +16,7 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider,
-                             QTreeView)
+                             QTreeView, QMessageBox)
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
@@ -119,6 +119,10 @@ class DataGUI(QWidget):
         self.comboBoxGroupSelect = QComboBox()
         self.comboBoxGroupSelect.currentTextChanged.connect(self.groupChange)
         self.file_control_grid.addWidget(self.comboBoxGroupSelect, 3, 0, 1, 2)
+
+        deleteGroupButton = QPushButton("Delete selected group", self)
+        deleteGroupButton.clicked.connect(self.deleteSelectedGroup)
+        self.file_control_grid.addWidget(deleteGroupButton, 4, 0, 1, 2)
 
         # Attribute table
         self.tableAttributes = QTableWidget()
@@ -266,6 +270,25 @@ class DataGUI(QWidget):
             print('Data attached')
         else:
             print('Select a data directory before attaching new data')
+
+    def deleteSelectedGroup(self):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        group_path = self.comboBoxGroupSelect.currentText()
+        if 'series_' in group_path:  # selected node is within a series group
+            series_no = int(group_path.split('series_')[-1].split('/')[0])
+            buttonReply = QMessageBox.question(self,
+                                               'Delete series',
+                                               "Are you sure you want to delete series {}?".format(series_no),
+                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if buttonReply == QMessageBox.Yes:
+                self.plugin.deleteSeriesGroup(file_path=file_path,
+                                              series_number=series_no)
+                print('Deleted series {}'.format(series_no))
+                self.populateGroups()
+            else:
+                print('Delete aborted')
+        else:
+            print('Select a node within a series first')
 
     def populateGroups(self):  # Qt-related pylint: disable=C0103
         """ Populate dropdown box of group comboBoxGroupSelect """

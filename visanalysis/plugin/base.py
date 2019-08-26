@@ -2,6 +2,7 @@ import h5py
 import scipy.signal as signal
 import numpy as np
 import pylab
+import functools
 
 
 class BasePlugin():
@@ -20,6 +21,14 @@ class BasePlugin():
         all_series = [val for s in all_series for val in s]
         series = [int(x.split('_')[-1]) for x in all_series]
         return series
+
+    def deleteSeriesGroup(self, file_path, series_number):
+        with h5py.File(file_path, 'r+') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            parent = epoch_run_group.parent
+            target_group_name = 'series_{}'.format(str(series_number).zfill(3))
+            del parent[target_group_name]
 
     def getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate,
                                plot_trace_flag = True,
@@ -76,11 +85,19 @@ class BasePlugin():
                 'stimulus_start_times':stimulus_start_times, 'dropped_frame_inds':dropped_frame_inds,
                 'frame_rate':frame_rate}
 
+
 def overwriteDataSet(group, name, data):
     if group.get(name):
         del group[name]
     group.create_dataset(name, data=data)
 
+
 def getDataType(file_path):
     with h5py.File(file_path, 'r+') as experiment_file:
         return experiment_file.attrs['rig']
+
+
+def find_series(name, obj, sn):
+    target_group_name = 'series_{}'.format(str(sn).zfill(3))
+    if target_group_name in name:
+        return obj
