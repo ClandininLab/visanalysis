@@ -43,6 +43,7 @@ class DataGUI(QWidget):
         self.roi_type = 'freehand'
         self.roi_radius = None
 
+        self.current_roi_index = 0
         self.roi_response = []
         self.roi_mask = []
         self.roi_path = []
@@ -198,7 +199,7 @@ class DataGUI(QWidget):
         self.roiSlider = QSlider(QtCore.Qt.Horizontal, self)
         self.roiSlider.setMinimum(0)
         self.roiSlider.setMaximum(self.max_rois)
-        self.roiSlider.valueChanged.connect(self.redrawRoiTraces)
+        self.roiSlider.valueChanged.connect(self.sliderUpdated)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 2)
 
         self.responsePlot = PlotWidget()
@@ -440,20 +441,26 @@ class DataGUI(QWidget):
                                                            series_number=self.series_number,
                                                            experiment_file_name=self.experiment_file_name)
 
-        #update list of roi data
+        # update list of roi data
         self.roi_mask.append(mask)
         self.roi_path.append(path)
         self.roi_response.append(self.new_roi_resp)
+        # update slider to show most recently drawn roi response
+        self.current_roi_index = len(self.roi_response)-1
+        self.roiSlider.setValue(self.current_roi_index)
 
         # Update figures
         self.redrawRoiTraces()
 
+    def sliderUpdated(self):
+        self.current_roi_index = self.roiSlider.value()
+        self.redrawRoiTraces()
+
     def redrawRoiTraces(self):
-        current_roi_index = self.roiSlider.value()
         self.responsePlot.clear()
-        if current_roi_index < len(self.roi_response):
-            penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[current_roi_index]]))
-            self.responsePlot.plot(np.squeeze(self.roi_response[current_roi_index].T), pen=penStyle)
+        if self.current_roi_index < len(self.roi_response):
+            penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[self.current_roi_index]]))
+            self.responsePlot.plot(np.squeeze(self.roi_response[self.current_roi_index].T), pen=penStyle)
 
         self.refreshLassoWidget()
 
@@ -477,12 +484,12 @@ class DataGUI(QWidget):
         self.populateGroups()
 
     def deleteRoi(self):
-        current_roi_index = self.roiSlider.value()
-        self.roi_mask.pop(current_roi_index)
-        self.roi_response.pop(current_roi_index)
-        self.roi_path.pop(current_roi_index)
-        self.redrawRoiTraces()
-
+        if self.current_roi_index < len(self.roi_response):
+            self.roi_mask.pop(self.current_roi_index)
+            self.roi_response.pop(self.current_roi_index)
+            self.roi_path.pop(self.current_roi_index)
+            self.roiSlider.setValue(self.current_roi_index-1)
+            self.redrawRoiTraces()
     def removeRoiSet(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
