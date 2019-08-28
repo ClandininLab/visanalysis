@@ -16,13 +16,13 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider,
-                             QTreeView, QMessageBox)
+                             QMessageBox, QTreeWidget, QTreeWidgetItem)
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
-from lazy5.inspect import get_hierarchy, get_attrs_group
+from lazy5.inspect import get_attrs_group
 from lazy5 import alter
 import inspect
 import skimage.io as io
@@ -62,24 +62,31 @@ class DataGUI(QWidget):
     def initUI(self):
         self.grid = QGridLayout(self)
 
-        # Grid for file selection and attriute table
         self.file_control_grid = QGridLayout()
         self.file_control_grid.setSpacing(3)
         self.grid.addLayout(self.file_control_grid, 0, 0)
 
+        self.file_tree_grid = QGridLayout()
+        self.file_tree_grid.setSpacing(3)
+        self.grid.addLayout(self.file_tree_grid, 1, 0)
+
+        self.group_control_grid = QGridLayout()
+        self.group_control_grid.setSpacing(3)
+        self.grid.addLayout(self.group_control_grid, 0, 1)
+
         self.attribute_grid = QGridLayout()
         self.attribute_grid.setSpacing(3)
-        self.grid.addLayout(self.attribute_grid, 1, 0)
+        self.grid.addLayout(self.attribute_grid, 1, 1)
 
         self.roi_control_grid = QGridLayout()
         self.roi_control_grid.setSpacing(3)
-        self.grid.addLayout(self.roi_control_grid, 0, 1)
+        self.grid.addLayout(self.roi_control_grid, 0, 2)
 
         self.plot_grid = QGridLayout()
         self.plot_grid.setSpacing(3)
-        self.grid.addLayout(self.plot_grid, 1, 1)
+        self.grid.addLayout(self.plot_grid, 1, 2)
 
-        # # # # File control browser: # # # # # # # #
+        # # # # File control browser: # # # # # # # # (0,0)
         loadButton = QPushButton("Load expt. file", self)
         loadButton.clicked.connect(self.selectDataFile)
         # Label with current expt file
@@ -101,31 +108,18 @@ class DataGUI(QWidget):
         attachDatabutton.clicked.connect(self.attachData)
         self.file_control_grid.addWidget(attachDatabutton, 2, 1)
 
-        # # # # Attribute browser: # # # # # # # #
-        # Heavily based on QtHdfLoad from LazyHDF5
-        # Group selection combobox
-        # self.groupTree = QTreeView(self)
-        # self.file_control_grid.addWidget(self.groupTree, 3, 0, 2, 2)
-        # tree = {'root': {
-        #             "1": ["A", "B", "C"],
-        #             "2": {
-        #                 "2-1": ["G", "H", "I"],
-        #                 "2-2": ["J", "K", "L"]},
-        #             "3": ["D", "E", "F"]}
-        # }
-        # root_model = QtGui.QStandardItemModel()
-        #
-        # self._populateTree(tree, root_model.invisibleRootItem())
+        # # # # File tree: # # # # # # # #  (1,0)
+        self.groupTree = QTreeWidget(self)
+        self.groupTree.setHeaderHidden(True)
+        self.groupTree.itemClicked.connect(self.onTreeItemClicked)
+        self.file_tree_grid.addWidget(self.groupTree, 3, 0, 2, 7)
 
-        self.comboBoxGroupSelect = QComboBox()
-        self.comboBoxGroupSelect.currentTextChanged.connect(self.groupChange)
-        self.file_control_grid.addWidget(self.comboBoxGroupSelect, 3, 0, 1, 2)
-
+        # # # # Group control: # # # # # # # # (0, 1)
         deleteGroupButton = QPushButton("Delete selected group", self)
         deleteGroupButton.clicked.connect(self.deleteSelectedGroup)
-        self.file_control_grid.addWidget(deleteGroupButton, 4, 0, 1, 2)
+        self.group_control_grid.addWidget(deleteGroupButton, 7, 0, 1, 2)
 
-        # Attribute table
+        # # # # Attribute table: # # # # # # # # (1, 1)
         self.tableAttributes = QTableWidget()
         self.tableAttributes.setStyleSheet("")
         self.tableAttributes.setColumnCount(2)
@@ -160,7 +154,7 @@ class DataGUI(QWidget):
         self.tableAttributes.itemChanged.connect(self.update_attrs_to_file)
         self.attribute_grid.addWidget(self.tableAttributes, 3, 0, 1, 8)
 
-        # Roi control buttons
+        # # # # Roi control # # # # # # # # (0, 2)
         # ROI type drop-down
         self.RoiTypeComboBox = QComboBox(self)
         self.RoiTypeComboBox.addItem("freehand")
@@ -174,11 +168,6 @@ class DataGUI(QWidget):
         self.clearROIsButton = QPushButton("Clear ROIs", self)
         self.clearROIsButton.clicked.connect(self.clearRois)
         self.roi_control_grid.addWidget(self.clearROIsButton, 0, 2)
-
-        # Delete roi set button
-        self.removeRoiSetButton = QPushButton("Remove ROI set", self)
-        self.removeRoiSetButton.clicked.connect(self.removeRoiSet)
-        self.roi_control_grid.addWidget(self.removeRoiSetButton, 1, 2)
 
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
@@ -205,7 +194,7 @@ class DataGUI(QWidget):
         self.responsePlot = PlotWidget()
         self.plot_grid.addWidget(self.responsePlot, 0, 0)
 
-        # Image canvas for image and lasso widget
+        # # # # Image canvas # # # # # # # # (1, 2)
         self.roi_canvas = MatplotlibWidget()
         toolbar = self.roi_canvas.findChild(QToolBar)
         toolbar.setVisible(False)
@@ -221,13 +210,70 @@ class DataGUI(QWidget):
         self.setGeometry(200, 200, 1200, 600)
         self.show()
 
-    def _populateTree(self, children, parent):
-        for child in sorted(children):
-            print(child)
-            child_item = QtGui.QStandardItem(child)
-            parent.appendRow(child_item)
-            if type(children) is dict:
-                self._populateTree(children[child], child_item)
+    def _populateTree(self, widget, dict):
+        widget.clear()
+        self.fill_item(widget.invisibleRootItem(), dict)
+
+    def fill_item(self, item, value):
+        item.setExpanded(True)
+        if type(value) is dict:
+            for key, val in sorted(value.items()):
+                child = QTreeWidgetItem()
+                child.setText(0, key)
+                item.addChild(child)
+                self.fill_item(child, val)
+        elif type(value) is list:
+            for val in value:
+                child = QTreeWidgetItem()
+                item.addChild(child)
+                if type(val) is dict:
+                    child.setText(0, '[dict]')
+                    self.fill_item(child, val)
+                elif type(val) is list:
+                    child.setText(0, '[list]')
+                    self.fill_item(child, val)
+                else:
+                    child.setText(0, val)
+                child.setExpanded(True)
+        else:
+            child = QTreeWidgetItem()
+            child.setText(0, value)
+            item.addChild(child)
+
+    def onTreeItemClicked(self, item, column):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        if 'series_' in group_path:
+            self.series_number = int(group_path.split('series_')[-1].split('/')[0])
+            print('selected series {}'.format(self.series_number))
+
+        if group_path != '':
+            attr_dict = get_attrs_group(file_path, group_path)
+            if 'series' in group_path.split('/')[-1]:
+                editable_values = False  # don't let user edit epoch parameters
+            else:
+                editable_values = True
+            self.populate_attrs(attr_dict = attr_dict, editable_values = editable_values)
+
+        if item.parent() is not None:
+            if item.parent().text(column) == 'rois': # selected existing roi group
+                roi_set_name = item.text(column)
+                print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
+                self.le_roiSetName.setText(roi_set_name)
+                self.loadRois()
+                self.redrawRoiTraces()
+
+        # show roi image
+        if self.data_directory is not None:  # user has selected a raw data directory
+            kwargs = {'data_directory': self.data_directory,
+                      'series_number': self.series_number,
+                      'experiment_file_name': self.experiment_file_name,
+                      'file_path': file_path,
+                      'pmt': 1}
+            self.roi_image = self.plugin.getRoiImage(**kwargs)
+            self.redrawRoiTraces()
+        else:
+            print('Select a data directory before drawing rois')
 
     def selectDataFile(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Open file")
@@ -274,36 +320,25 @@ class DataGUI(QWidget):
 
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = self.comboBoxGroupSelect.currentText()
-        if 'series_' in group_path:  # selected node is within a series group
-            series_no = int(group_path.split('series_')[-1].split('/')[0])
-            buttonReply = QMessageBox.question(self,
-                                               'Delete series',
-                                               "Are you sure you want to delete series {}?".format(series_no),
-                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if buttonReply == QMessageBox.Yes:
-                self.plugin.deleteSeriesGroup(file_path=file_path,
-                                              series_number=series_no)
-                print('Deleted series {}'.format(series_no))
-                self.populateGroups()
-            else:
-                print('Delete aborted')
-        else:
-            print('Select a node within a series first')
+        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_name = group_path.split('/')[-1]
 
-    def populateGroups(self):  # Qt-related pylint: disable=C0103
-        """ Populate dropdown box of group comboBoxGroupSelect """
+        buttonReply = QMessageBox.question(self,
+                                           'Delete series',
+                                           "Are you sure you want to delete group {}?".format(group_name),
+                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if buttonReply == QMessageBox.Yes:
+            self.plugin.deleteGroup(file_path=file_path,
+                                    group_path=group_path)
+            print('Deleted group {}'.format(group_name))
+            self.populateGroups()
+        else:
+            print('Delete aborted')
+
+    def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.group_dset_dict = get_hierarchy(file_path)
-        # Load Group dropdown box
-        self.comboBoxGroupSelect.clear()
-        exclusions = ['epochs', 'stimulus_timing', 'acquisition']
-        for key in self.group_dset_dict:
-            if np.any([x in key for x in exclusions]):
-                pass
-            else:
-                self.comboBoxGroupSelect.addItem(key)
-        return [file_path]
+        self.group_dset_dict = self.plugin.getHierarchy(file_path)
+        self._populateTree(self.groupTree, self.group_dset_dict)
 
     def populate_attrs(self, attr_dict=None, editable_values = False):
         """ Populate attribute for currently selected group """
@@ -330,7 +365,7 @@ class DataGUI(QWidget):
 
     def update_attrs_to_file(self, item):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = self.comboBoxGroupSelect.currentText()
+        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
 
         attr_key = self.tableAttributes.item(item.row(),0).text()
         attr_val = item.text()
@@ -338,50 +373,6 @@ class DataGUI(QWidget):
         # update attr in file
         alter.alter_attr(group_path, attr_key, attr_val, file=file_path)
         print('Changed attr {} to = {}'.format(attr_key, attr_val))
-
-    def groupChange(self):  # Qt-related pylint: disable=C0103
-        self.clearRois()
-
-        group_path = self.comboBoxGroupSelect.currentText()
-        if group_path != '':
-            file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-
-            attr_dict = get_attrs_group(file_path, group_path)
-            if 'series' in group_path.split('/')[-1]:
-                editable_values = False  # don't let user edit epoch parameters
-            else:
-                editable_values = True
-            self.populate_attrs(attr_dict = attr_dict, editable_values = editable_values)
-
-        levels = len(group_path.split('/'))
-        if levels > 2:
-            parent = group_path.split('/')[-2]
-        else:
-            parent = ''
-
-        if 'series_' in group_path:  # selected node is within a series group
-            self.series_number = int(group_path.split('series_')[-1].split('/')[0])
-            print('selected series {}'.format(self.series_number))
-
-            if self.data_directory is not None:  # user has selected a raw data directory
-                kwargs = {'data_directory': self.data_directory,
-                          'series_number': self.series_number,
-                          'experiment_file_name': self.experiment_file_name,
-                          'file_path': file_path,
-                          'pmt': 1}
-                self.roi_image = self.plugin.getRoiImage(**kwargs)
-                self.refreshLassoWidget()
-            else:
-                print('Select a data directory before drawing rois')
-
-            if parent == 'rois':  # selected node is an existing roi set
-                roi_set_name = group_path.split('/')[-1]
-                self.series_number = int(group_path.split('series_')[-1].split('/')[0])
-                print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
-                self.le_roiSetName.setText(roi_set_name)
-                self.loadRois()
-                self.refreshLassoWidget()
-                self.redrawRoiTraces()
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #
 
@@ -464,11 +455,11 @@ class DataGUI(QWidget):
 
         self.refreshLassoWidget()
 
-
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
+
     def loadRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        roi_set_path = self.comboBoxGroupSelect.currentText()
+        roi_set_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.roi_response, self.roi_image, self.roi_path, self.roi_mask = roi.loadRoiSet(file_path, roi_set_path)
 
     def saveRois(self):
@@ -490,11 +481,6 @@ class DataGUI(QWidget):
             self.roi_path.pop(self.current_roi_index)
             self.roiSlider.setValue(self.current_roi_index-1)
             self.redrawRoiTraces()
-    def removeRoiSet(self):
-        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        roi_set_name = self.le_roiSetName.text()
-        roi.removeRoiSet(file_path, self.series_number, roi_set_name)
-        self.populateGroups()
 
     def clearRois(self):
         self.roi_mask = []

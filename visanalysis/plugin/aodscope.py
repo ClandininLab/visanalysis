@@ -164,7 +164,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
             frame_monitor = None
             print('No analog_input file found at: ' + full_file_path)
 
-        sample_rate = 1e4 #TODO: figure this out from tdms
+        sample_rate = 1e4  # TODO: figure this out from tdms
 
         return frame_monitor, time_vector, sample_rate
 
