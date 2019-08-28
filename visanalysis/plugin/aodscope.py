@@ -62,6 +62,24 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return poi_overlay
 
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name):
+        poi_data = self.getPoiData(poi_directory=data_directory,
+                                   poi_series_number=series_number,
+                                   pmt=1)
+        # Imaging metadata
+        # TODO: ctl+click to select multiple regions?
+        # TODO: poi picker?
+        # TODO: number of pois as attribute
+
+        indices = roi_path.contains_points(poi_data['poi_locations'], radius=0.5)
+        selected_poi_data = poi_data['poi_data_matrix'][indices, :]
+        if selected_poi_data.shape[0] == 0:
+            roi_response = None
+        else:
+            print('Selected {} pois'.format(selected_poi_data.shape[0]))
+            roi_response = np.mean(selected_poi_data, axis=0)
+        return roi_response
+
     def attachData(self, experiment_file_name, file_path, data_directory):
         for series_number in self.getSeriesNumbers(file_path):
             # # # # Retrieve metadata from files in data directory # # #
@@ -98,23 +116,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
                     for inner_k in metadata[outer_k].keys():
                         acquisition_group.attrs[outer_k + '/' + inner_k] = metadata[outer_k][inner_k]
 
-                # attach poi map jpeg and Snap Image
-                snap_name = metadata['Image']['name'].replace('"', '')
-                snap_ct = 0
-                while (('points' in snap_name) and (snap_ct < 1000)):  # used snap image from a previous POI scan
-                    snap_ct += 1
-                    alt_dict = self.getMetaData(data_directory, int(snap_name[6:]))
-                    temp_image = alt_dict.get('Image')
-                    if temp_image is not None:
-                        snap_name = temp_image['name'].replace('"', '')
-
-                snap_image, snap_settings, poi_locations = self.getSnapImage(data_directory,
-                                                                             snap_name,
-                                                                             poi_data['poi_xy'],
-                                                                             pmt=1)
-
-                plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_locations)
-                plugin.base.overwriteDataSet(acquisition_group, "snap_image", snap_image)
+                plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_data['poi_locations'])
+                plugin.base.overwriteDataSet(acquisition_group, "snap_image", poi_data['snap_image'])
 
             print('Attached data to series {}'.format(series_number))
 
@@ -132,10 +135,27 @@ class AodScopePlugin(plugin.base.BasePlugin):
             for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])): #first object is time points. Subsequent for POIs
                 poi_data_matrix[poi_ind, :] = tdms_file.channel_data('PMT'+str(pmt), 'POI ' + str(poi_ind) + ' ')
 
-            # get poi locations:
+            # get poi locations in raw coordinates:
             poi_x = [int(v) for v in tdms_file.channel_data('parameter', 'parameter')[21:]]
             poi_y = [int(v) for v in tdms_file.channel_data('parameter', 'value')[21:]]
             poi_xy = np.array(list(zip(poi_x, poi_y)))
+
+            # get Snap image and poi locations in snap coordinates
+            metadata = self.getMetaData(poi_directory,
+                                        poi_series_number)
+            snap_name = metadata['Image']['name'].replace('"', '')
+            snap_ct = 0
+            while (('points' in snap_name) and (snap_ct < 1000)):  # used snap image from a previous POI scan
+                snap_ct += 1
+                alt_dict = self.getMetaData(poi_directory, int(snap_name[6:]))
+                temp_image = alt_dict.get('Image')
+                if temp_image is not None:
+                    snap_name = temp_image['name'].replace('"', '')
+
+            snap_image, snap_settings, poi_locations = self.getSnapImage(poi_directory,
+                                                                         snap_name,
+                                                                         poi_xy,
+                                                                         pmt=1)
         except:
             time_points = None
             poi_data_matrix = None
@@ -143,7 +163,10 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return {'time_points': time_points,
                 'poi_data_matrix': poi_data_matrix,
-                'poi_xy': poi_xy}
+                'poi_xy': poi_xy,
+                'snap_image': snap_image,
+                'snap_settings': snap_settings,
+                'poi_locations': poi_locations}
 
     def getPhotodiodeSignal(self, data_directory, series_number):
         poi_name = 'points' + ('0000' + str(series_number))[-4:]

@@ -22,11 +22,8 @@ from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
-import inspect
-import skimage.io as io
 
 from visanalysis import roi, plot_tools, plugin
-import visanalysis
 
 
 class DataGUI(QWidget):
@@ -47,11 +44,7 @@ class DataGUI(QWidget):
         self.roi_path = []
         self.roi_image = []
 
-        img_path = os.path.join(inspect.getfile(visanalysis).split('visanalysis')[0],
-                                'visanalysis',
-                                'resources',
-                                'clandinin_stainedglass.png')
-        self.clandinin_logo = io.imread(img_path)
+        self.blank_image = np.zeros((1,1))
 
         self.colors = sns.color_palette("deep", n_colors = 20)
 
@@ -391,15 +384,11 @@ class DataGUI(QWidget):
             self.roi_ax.imshow(newImage, cmap=cm.gray)
             init_lasso = True
         else:
-            self.roi_ax.imshow(self.clandinin_logo)
+            self.roi_ax.imshow(self.blank_image)
 
         self.roi_canvas.draw()
 
         if init_lasso:
-            pixX = np.arange(self.roi_image.shape[1])
-            pixY = np.arange(self.roi_image.shape[0])
-            yv, xv = np.meshgrid(pixX, pixY)
-            self.roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
             if self.roi_type == 'circle':
                 self.lasso = EllipseSelector(self.roi_ax, self.onselectEllipse)
             elif self.roi_type == 'freehand':
@@ -409,8 +398,7 @@ class DataGUI(QWidget):
 
     def onselectFreehand(self, verts):
         new_roi_path = path.Path(verts)
-        ind = new_roi_path.contains_points(self.roi_pix, radius=1)
-        self.updateRoiSelection(ind, new_roi_path)
+        self.updateRoiSelection(new_roi_path)
 
     def onselectEllipse(self, pos1, pos2, definedRadius=None):
         x1 = np.round(pos1.xdata)
@@ -425,20 +413,21 @@ class DataGUI(QWidget):
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         new_roi_path = path.Path.circle(center = center, radius = radiusX)
-        ind = new_roi_path.contains_points(self.roi_pix, radius=0.5)
 
-        self.updateRoiSelection(ind, new_roi_path)
+        self.updateRoiSelection(new_roi_path)
 
-    def updateRoiSelection(self, ind, path):
-        mask = roi.getRoiMask(self.roi_image, ind)
-        self.new_roi_resp = self.plugin.getRoiDataFromMask(mask=mask,
+    def updateRoiSelection(self, new_roi_path):
+        mask = roi.getRoiMaskFromPath(self.roi_image, new_roi_path)
+        self.new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
                                                            data_directory=self.data_directory,
                                                            series_number=self.series_number,
                                                            experiment_file_name=self.experiment_file_name)
-
+        if self.new_roi_resp is None:
+            print('No pixels in selected roi')
+            return
         # update list of roi data
         self.roi_mask.append(mask)
-        self.roi_path.append(path)
+        self.roi_path.append(new_roi_path)
         self.roi_response.append(self.new_roi_resp)
         # update slider to show most recently drawn roi response
         self.current_roi_index = len(self.roi_response)-1

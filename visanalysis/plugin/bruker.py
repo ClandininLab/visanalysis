@@ -33,10 +33,12 @@ class BrukerPlugin(plugin.base.BasePlugin):
         roi_image = np.mean(current_series, axis=0)  # avg across time
         return roi_image
 
-    def getRoiDataFromMask(self, mask, data_directory, series_number, experiment_file_name):
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name):
         current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
-        roi_resp = roi.getRoiDataFromMask(current_series, mask)
-        return roi_resp
+        roi_image = np.mean(current_series, axis=0)
+        mask = roi.getRoiMaskFromPath(roi_image, roi_path)
+        roi_response = (np.mean(current_series[:, mask], axis=1, keepdims=True) - np.min(current_series)).T
+        return roi_response
 
     def loadImageSeries(self, experiment_file_name, data_directory, series_number):
         image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]

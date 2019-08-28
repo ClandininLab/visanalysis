@@ -77,16 +77,20 @@ def removeRoiSet(file_path, series_number, roi_set_name):
         print('Roi group {} from series {} deleted'.format(roi_set_name, series_number))
 
 
-def getRoiMask(image, indices):
-    array = np.zeros((image.shape[0], image.shape[1]))
+def getRoiMaskFromPath(roi_image, roi_path):
+    pixX = np.arange(roi_image.shape[1])
+    pixY = np.arange(roi_image.shape[0])
+    yv, xv = np.meshgrid(pixX, pixY)
+    roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
+
+    indices = roi_path.contains_points(roi_pix, radius=0.5)
+
+    array = np.zeros((roi_image.shape[0], roi_image.shape[1]))
     lin = np.arange(array.size)
     newRoiArray = array.flatten()
     newRoiArray[lin[indices]] = 1
     newRoiArray = newRoiArray.reshape(array.shape)
-    mask = newRoiArray == 1 #convert to boolean for masking
+
+    mask = newRoiArray == 1  # convert to boolean for masking
+
     return mask
-
-
-def getRoiDataFromMask(current_series, mask):
-    roi_response = (np.mean(current_series[:, mask], axis=1, keepdims=True) - np.min(current_series)).T
-    return roi_response

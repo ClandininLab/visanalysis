@@ -163,7 +163,10 @@ def addImageScaleBar(ax, image, scale_bar_length, microns_per_pixel, location):
 
 def overlayImage(im, mask, alpha, colors=None):
     im = im / np.max(im)
-    imRGB = np.tile(im[..., np.newaxis], 3)
+    if len(im.shape) < 3:
+        imRGB = np.tile(im[..., np.newaxis], 3)
+    else:
+        imRGB = im
 
     overlayComponent = 0
     origImageComponent = 0
