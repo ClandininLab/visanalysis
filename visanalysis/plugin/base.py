@@ -29,6 +29,22 @@ class BasePlugin():
             parent = group_to_delete.parent
             del parent[group_name]
 
+    def changeAttribute(self, file_path, group_path, attr_key, attr_val):
+        # see https://github.com/CCampJr/LazyHDF5
+        #TODO: try to keep the type the same?
+        with h5py.File(file_path, 'r+') as experiment_file:
+            group = experiment_file[group_path]
+            group.attrs[attr_key] = attr_val
+
+    def getAttributesFromGroup(self, file_path, group_path):
+        # see https://github.com/CCampJr/LazyHDF5
+        with h5py.File(file_path, 'r+') as experiment_file:
+            group = experiment_file[group_path]
+            attr_dict = {}
+            for at in group.attrs:
+                attr_dict[at] = group.attrs[at]
+            return attr_dict
+
     def getPathFromTreeItem(self, tree_item):
         path = tree_item.text(0)
         parent = tree_item.parent()

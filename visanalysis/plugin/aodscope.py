@@ -113,7 +113,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                                                              poi_data['poi_xy'],
                                                                              pmt=1)
 
-                roi_map = self.getRoiImage(data_directory, series_number)
                 plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_locations)
                 plugin.base.overwriteDataSet(acquisition_group, "snap_image", snap_image)
 

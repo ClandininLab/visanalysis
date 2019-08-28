@@ -22,8 +22,6 @@ from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
-from lazy5.inspect import get_attrs_group
-from lazy5 import alter
 import inspect
 import skimage.io as io
 
@@ -243,17 +241,11 @@ class DataGUI(QWidget):
     def onTreeItemClicked(self, item, column):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        self.clearRois()
+        self.series_number = None
         if 'series_' in group_path:
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
             print('selected series {}'.format(self.series_number))
-
-        if group_path != '':
-            attr_dict = get_attrs_group(file_path, group_path)
-            if 'series' in group_path.split('/')[-1]:
-                editable_values = False  # don't let user edit epoch parameters
-            else:
-                editable_values = True
-            self.populate_attrs(attr_dict = attr_dict, editable_values = editable_values)
 
         if item.parent() is not None:
             if item.parent().text(column) == 'rois': # selected existing roi group
@@ -263,17 +255,26 @@ class DataGUI(QWidget):
                 self.loadRois()
                 self.redrawRoiTraces()
 
+        if group_path != '':
+            attr_dict = self.plugin.getAttributesFromGroup(file_path, group_path)
+            if 'series' in group_path.split('/')[-1]:
+                editable_values = False  # don't let user edit epoch parameters
+            else:
+                editable_values = True
+            self.populate_attrs(attr_dict = attr_dict, editable_values = editable_values)
+
         # show roi image
-        if self.data_directory is not None:  # user has selected a raw data directory
-            kwargs = {'data_directory': self.data_directory,
-                      'series_number': self.series_number,
-                      'experiment_file_name': self.experiment_file_name,
-                      'file_path': file_path,
-                      'pmt': 1}
-            self.roi_image = self.plugin.getRoiImage(**kwargs)
-            self.redrawRoiTraces()
-        else:
-            print('Select a data directory before drawing rois')
+        if self.series_number is not None:
+            if self.data_directory is not None:  # user has selected a raw data directory
+                kwargs = {'data_directory': self.data_directory,
+                          'series_number': self.series_number,
+                          'experiment_file_name': self.experiment_file_name,
+                          'file_path': file_path,
+                          'pmt': 1}
+                self.roi_image = self.plugin.getRoiImage(**kwargs)
+                self.redrawRoiTraces()
+            else:
+                print('Select a data directory before drawing rois')
 
     def selectDataFile(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Open file")
@@ -371,7 +372,10 @@ class DataGUI(QWidget):
         attr_val = item.text()
 
         # update attr in file
-        alter.alter_attr(group_path, attr_key, attr_val, file=file_path)
+        self.plugin.changeAttribute(file_path=file_path,
+                                    group_path=group_path,
+                                    attr_key=attr_key,
+                                    attr_val=attr_val)
         print('Changed attr {} to = {}'.format(attr_key, attr_val))
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #
