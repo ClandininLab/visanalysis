@@ -12,7 +12,6 @@ import sys
 import pyqtgraph as pg
 from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
 from pyqtgraph.widgets.PlotWidget import PlotWidget
-from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtWidgets import (QPushButton, QWidget, QGridLayout, QLineEdit, QComboBox, QApplication)
 from matplotlib import path
 from matplotlib.widgets import LassoSelector

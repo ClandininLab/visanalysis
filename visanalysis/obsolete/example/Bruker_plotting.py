@@ -9,7 +9,7 @@ import numpy as np
    
 from visanalysis.imaging_data import BrukerData
 
-file_name = '2019-06-13'
+file_name = '2019-06-27'
 series_number = 1
 
 ImagingData = BrukerData.ImagingDataObject(file_name, series_number)
@@ -20,7 +20,7 @@ for k in ImagingData.roi.keys():
 
 
 # %% Plot roi responses
-roi_name = 'test_1'
+roi_name = 'single_dendrite'
     
 fh = plt.figure()
 for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
@@ -33,6 +33,10 @@ for roi in range(ImagingData.roi[roi_name]['epoch_response'].shape[0]):
     
     ax.plot(time_vector, current_mean, 'k')
     ax.fill_between(time_vector, current_mean - current_sem, current_mean + current_sem, alpha = 0.5)
+    
+# %%
+ImagingData.generateRoiMap(roi_name, scale_bar_length=20)
+
     
 
 # %% Use analysis functions

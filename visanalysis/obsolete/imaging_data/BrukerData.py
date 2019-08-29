@@ -389,4 +389,4 @@ class ImagingDataObject(imaging_data.ImagingData.ImagingDataObject):
         #TODO: Change to handle multiple photodiode signals
         frame_monitor = data_frame.get(' ' + active_channels[0]).values
         
-        self.stimulus_timing = self.getEpochAndFrameTiming(tt, frame_monitor, sample_rate, plot_trace_flag = False, command_frame_rate = 115)
+        self.stimulus_timing = self.getEpochAndFrameTiming(tt, frame_monitor, sample_rate, plot_trace_flag = True, command_frame_rate = 115)
