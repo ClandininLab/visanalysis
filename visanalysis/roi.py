@@ -72,17 +72,6 @@ def loadRoiSet(file_path, roi_set_path):
                     subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
                     roi_path.append(subpaths)  # list of list of paths
 
-            #
-            # roi_path = []
-            # new_path = roi_set_group.get("path_vertices_0")
-            # ind = 0
-            # while new_path is not None:
-            #     roi_path.append(new_path)
-            #     ind += 1
-            #     new_path = roi_set_group.get("path_vertices_" + str(ind))
-            # roi_path = [x[:] for x in roi_path]  # path vertices
-            # roi_path = [path.Path(x) for x in roi_path]  # convert from verts to path object
-
     return roi_response, roi_image, roi_path, roi_mask
 
 
