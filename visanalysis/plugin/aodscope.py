@@ -66,12 +66,12 @@ class AodScopePlugin(plugin.base.BasePlugin):
         poi_data = self.getPoiData(poi_directory=data_directory,
                                    poi_series_number=series_number,
                                    pmt=1)
-        # Imaging metadata
-        # TODO: ctl+click to select multiple regions?
-        # TODO: poi picker?
         # TODO: number of pois as attribute
+        indices = []
+        for p in roi_path:
+            indices.append(p.contains_points(poi_data['poi_locations'], radius=0.5))
+        indices = np.vstack(indices).any(axis=0)
 
-        indices = roi_path.contains_points(poi_data['poi_locations'], radius=0.5)
         selected_poi_data = poi_data['poi_data_matrix'][indices, :]
         if selected_poi_data.shape[0] == 0:
             roi_response = None

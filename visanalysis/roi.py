@@ -30,11 +30,23 @@ def saveRoiSet(file_path, series_number,
         for dataset_key in current_roi_group.keys():
             if 'path_vertices' in dataset_key:
                 del current_roi_group[dataset_key]
-        for p_ind, p in enumerate(roi_path):
-            current_roi_group.create_dataset("path_vertices_" + str(p_ind), data = p.vertices)
+
+        for roi_ind, roi_paths in enumerate(roi_path):  # for roi indices
+            current_roi_index_group = current_roi_group.require_group('roipath_{}'.format(roi_ind))
+            for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
+                current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
+                current_roi_path_group.create_dataset("path_vertices", data = p.vertices)
 
 
 def loadRoiSet(file_path, roi_set_path):
+    def find_roi_path(name, obj):
+        if 'roipath' in name:
+            return obj
+
+    def find_roi_subpath(name, obj):
+        if 'subpath' in name:
+            return obj
+
     roi_set_name = roi_set_path.split('/')[-1]
     with h5py.File(file_path, 'r') as experiment_file:
         if 'series' in roi_set_name:  # roi set from a different series
@@ -51,14 +63,25 @@ def loadRoiSet(file_path, roi_set_path):
             roi_image = roi_set_group.get("roi_image")[:]
 
             roi_path = []
-            new_path = roi_set_group.get("path_vertices_0")
-            ind = 0
-            while new_path is not None:
-                roi_path.append(new_path)
-                ind += 1
-                new_path = roi_set_group.get("path_vertices_" + str(ind))
-            roi_path = [x[:] for x in roi_path]  # path vertices
-            roi_path = [path.Path(x) for x in roi_path]  # convert from verts to path object
+            for roipath_key, roipath_group in roi_set_group.items():
+                if isinstance(roipath_group, h5py._hl.group.Group):
+                    subpaths = []
+                    for roi_subpath_group in roipath_group.values():
+                        if isinstance(roi_subpath_group, h5py._hl.group.Group):
+                            subpaths.append(roi_subpath_group.get("path_vertices")[:])
+                    subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
+                    roi_path.append(subpaths)  # list of list of paths
+
+            #
+            # roi_path = []
+            # new_path = roi_set_group.get("path_vertices_0")
+            # ind = 0
+            # while new_path is not None:
+            #     roi_path.append(new_path)
+            #     ind += 1
+            #     new_path = roi_set_group.get("path_vertices_" + str(ind))
+            # roi_path = [x[:] for x in roi_path]  # path vertices
+            # roi_path = [path.Path(x) for x in roi_path]  # convert from verts to path object
 
     return roi_response, roi_image, roi_path, roi_mask
 
@@ -83,7 +106,10 @@ def getRoiMaskFromPath(roi_image, roi_path):
     yv, xv = np.meshgrid(pixX, pixY)
     roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
 
-    indices = roi_path.contains_points(roi_pix, radius=0.5)
+    indices = []
+    for p in roi_path:
+        indices.append(p.contains_points(roi_pix, radius=0.5))
+    indices = np.vstack(indices).any(axis=0)
 
     array = np.zeros((roi_image.shape[0], roi_image.shape[1]))
     lin = np.arange(array.size)

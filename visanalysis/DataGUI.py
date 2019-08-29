@@ -43,6 +43,7 @@ class DataGUI(QWidget):
         self.roi_mask = []
         self.roi_path = []
         self.roi_image = []
+        self.roi_path_list = []
 
         self.blank_image = np.zeros((1,1))
 
@@ -190,6 +191,7 @@ class DataGUI(QWidget):
         toolbar = self.roi_canvas.findChild(QToolBar)
         toolbar.setVisible(False)
         self.roi_fig = self.roi_canvas.getFigure()
+        # self.roi_fig.canvas.mpl_connect('key_press_event', self.onKeyPress)
         self.roi_ax = self.roi_fig.add_subplot(1, 1, 1)
         self.roi_ax.set_aspect('equal')
         self.roi_ax.set_axis_off()
@@ -238,12 +240,12 @@ class DataGUI(QWidget):
         self.series_number = None
         if 'series_' in group_path:
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
-            print('selected series {}'.format(self.series_number))
+            # print('selected series {}'.format(self.series_number))
 
         if item.parent() is not None:
             if item.parent().text(column) == 'rois': # selected existing roi group
                 roi_set_name = item.text(column)
-                print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
+                # print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
                 self.le_roiSetName.setText(roi_set_name)
                 self.loadRois()
                 self.redrawRoiTraces()
@@ -265,7 +267,9 @@ class DataGUI(QWidget):
                           'file_path': file_path,
                           'pmt': 1}
                 self.roi_image = self.plugin.getRoiImage(**kwargs)
-                self.redrawRoiTraces()
+                if self.roi_image is not None:
+                    self.redrawRoiTraces()
+
             else:
                 print('Select a data directory before drawing rois')
 
@@ -388,19 +392,38 @@ class DataGUI(QWidget):
 
         self.roi_canvas.draw()
 
+        self.roi_path_list = []
         if init_lasso:
             if self.roi_type == 'circle':
-                self.lasso = EllipseSelector(self.roi_ax, self.onselectEllipse)
+                self.lasso_1 = EllipseSelector(self.roi_ax, onselect=self.newEllipse, button=1)
             elif self.roi_type == 'freehand':
-                self.lasso = LassoSelector(self.roi_ax, self.onselectFreehand)
+                self.lasso_1 = LassoSelector(self.roi_ax, onselect=self.newFreehand, button=1)
+                self.lasso_2 = LassoSelector(self.roi_ax, onselect=self.appendFreehand, button=3)
             else:
                 print('Warning ROI type not recognized. Choose circle or freehand')
 
-    def onselectFreehand(self, verts):
+    def newFreehand(self, verts):
         new_roi_path = path.Path(verts)
-        self.updateRoiSelection(new_roi_path)
+        self.updateRoiSelection([new_roi_path])
 
-    def onselectEllipse(self, pos1, pos2, definedRadius=None):
+    def appendFreehand(self, verts):
+        print('Appending rois, hit Enter/Return to finish')
+        self.roi_path_list.append(path.Path(verts))
+
+    def keyPressEvent(self, event):
+        if type(event) == QtGui.QKeyEvent:
+            if np.any([event.key() == QtCore.Qt.Key_Return, event.key() == QtCore.Qt.Key_Enter]):
+                if len(self.roi_path_list) > 0:
+                    event.accept()
+                    self.updateRoiSelection(self.roi_path_list)
+                else:
+                    event.ignore()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def newEllipse(self, pos1, pos2, definedRadius=None):
         x1 = np.round(pos1.xdata)
         x2 = np.round(pos2.xdata)
         y1 = np.round(pos1.ydata)
@@ -412,9 +435,8 @@ class DataGUI(QWidget):
             radiusX = self.roi_radius
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
-        new_roi_path = path.Path.circle(center = center, radius = radiusX)
-
-        self.updateRoiSelection(new_roi_path)
+        self.new_roi_path = path.Path.circle(center = center, radius = radiusX)
+        self.updateRoiSelection([self.new_roi_path])
 
     def updateRoiSelection(self, new_roi_path):
         mask = roi.getRoiMaskFromPath(self.roi_image, new_roi_path)
@@ -427,7 +449,7 @@ class DataGUI(QWidget):
             return
         # update list of roi data
         self.roi_mask.append(mask)
-        self.roi_path.append(new_roi_path)
+        self.roi_path.append(new_roi_path)  # list of lists of paths
         self.roi_response.append(self.new_roi_resp)
         # update slider to show most recently drawn roi response
         self.current_roi_index = len(self.roi_response)-1

@@ -25,19 +25,28 @@ from visanalysis import plugin, roi
 class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
+        self.current_series = None
+        self.current_series_number = 0
 
     def getRoiImage(self, **kwargs):
-        current_series = self.loadImageSeries(kwargs.get('experiment_file_name'),
-                                              kwargs.get('data_directory'),
-                                              kwargs.get('series_number'))
-        roi_image = np.mean(current_series, axis=0)  # avg across time
+        if kwargs.get('series_number') != self.current_series_number:
+            self.current_series_number = kwargs.get('series_number')
+            self.current_series = self.loadImageSeries(kwargs.get('experiment_file_name'),
+                                                       kwargs.get('data_directory'),
+                                                       kwargs.get('series_number'))
+        if self.current_series is None:  # No image file found
+            roi_image = None
+        else:
+            roi_image = np.mean(self.current_series, axis=0)  # avg across time
         return roi_image
 
     def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name):
-        current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
-        roi_image = np.mean(current_series, axis=0)
+        if series_number != self.current_series_number:
+            self.current_series_number = series_number
+            self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
+        roi_image = np.mean(self.current_series, axis=0)
         mask = roi.getRoiMaskFromPath(roi_image, roi_path)
-        roi_response = (np.mean(current_series[:, mask], axis=1, keepdims=True) - np.min(current_series)).T
+        roi_response = (np.mean(self.current_series[:, mask], axis=1, keepdims=True) - np.min(self.current_series)).T
         return roi_response
 
     def loadImageSeries(self, experiment_file_name, data_directory, series_number):
@@ -47,27 +56,28 @@ class BrukerPlugin(plugin.base.BasePlugin):
         reg_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
 
         if os.path.isfile(reg_file_path):
-            current_series = io.imread(reg_file_path)
+            image_series = io.imread(reg_file_path)
         elif os.path.isfile(raw_file_path):
-            current_series = io.imread(raw_file_path)
+            image_series = io.imread(raw_file_path)
             print('!! Warning: no registered series found !!')
         else:
+            image_series = None
             print('File not found at {}'.format(raw_file_path))
 
-        return current_series  # tyx
+        return image_series
 
-    def registerStack(self, current_series, response_timing):
+    def registerStack(self, image_series, response_timing):
         """
         """
 
         reference_time_frame = 1  # sec, first frames to use as reference for registration
         reference_frame = np.where(response_timing['stack_times'] > reference_time_frame)[0][0]
 
-        reference_image = np.squeeze(np.mean(current_series[0:reference_frame,:,:], axis = 0))
+        reference_image = np.squeeze(np.mean(image_series[0:reference_frame,:,:], axis = 0))
         register = CrossCorr()
-        model = register.fit(current_series, reference=reference_image)
+        model = register.fit(image_series, reference=reference_image)
 
-        registered_series = model.transform(current_series)
+        registered_series = model.transform(image_series)
         if len(registered_series.shape) == 3:  # xyt
             registered_series = registered_series.toseries().toarray().transpose(2,0,1)  # shape t, y, x
         elif len(registered_series.shape) == 4:  # xyzt
@@ -82,7 +92,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             #  Check to see if this series has already been registered
             raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
             if os.path.isfile(raw_file_path):
-                current_series = io.imread(raw_file_path)
+                image_series = io.imread(raw_file_path)
             else:
                 print('File not found at {}'.format(raw_file_path))
                 continue
@@ -91,7 +101,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                                                         data_directory,
                                                         series_number)
 
-            registered_series = self.registerStack(current_series, response_timing)
+            registered_series = self.registerStack(image_series, response_timing)
             save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
             print('Saved: ' + save_path)
             imsave(save_path, registered_series)

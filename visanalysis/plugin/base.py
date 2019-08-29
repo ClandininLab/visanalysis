@@ -116,13 +116,13 @@ class BasePlugin():
 
 def recursively_load_dict_contents_from_group(h5file, path):
     # https://codereview.stackexchange.com/questions/120802/recursively-save-python-dictionaries-to-hdf5-files-using-h5py
-    exclusions = ['acquisition', 'Client', 'epochs', 'stimulus_timing']
+    exclusions = ['acquisition', 'Client', 'epochs', 'stimulus_timing', 'roipath', 'subpath']
     ans = {}
     for key, item in h5file[path].items():
         if isinstance(item, h5py._hl.dataset.Dataset):
             pass
         elif isinstance(item, h5py._hl.group.Group):
-            if np.any([x == key for x in exclusions]):
+            if np.any([x in key for x in exclusions]):
                 pass
             else:
                 ans[key] = recursively_load_dict_contents_from_group(h5file, path + key + '/')

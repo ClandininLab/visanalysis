@@ -183,4 +183,7 @@ def overlayImage(im, mask, alpha, colors=None):
         origImageComponent += (1 - alpha) * maskRGB * imRGB
 
     untouched = (compositeMask == False) * imRGB
-    return untouched + overlayComponent + origImageComponent
+
+    im_out = untouched + overlayComponent + origImageComponent
+    im_out = (im_out * 255).astype(np.uint8)
+    return im_out
