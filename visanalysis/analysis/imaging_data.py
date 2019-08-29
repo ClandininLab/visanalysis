@@ -34,6 +34,9 @@ class ImagingDataObject():
         # Calculate stimulus_timing
         self.computeEpochAndFrameTiming()
 
+        # Get roi responses and calculate epoch response matrix for each
+        self.getRoiResponses()
+
         self.colors = sns.color_palette("deep", n_colors=20)
 
     def getRunParameters(self):
@@ -139,17 +142,26 @@ class ImagingDataObject():
                                 'dropped_frame_inds': dropped_frame_inds,
                                 'frame_rate': frame_rate}
 
-    def getRoi(self, roi_name):
+    def getRoiResponses(self):
+        self.roi = {}
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=self.series_number)
             roi_parent_group = experiment_file.visititems(find_partial)['rois']
-            roi_set_group = roi_parent_group[roi_name]
-            self.roi = {}
-            self.roi['roi_response'] = list(roi_set_group.get("roi_response")[:])
-            self.roi['roi_mask'] = list(roi_set_group.get("roi_mask")[:])
-            self.roi['roi_image'] = roi_set_group.get("roi_image")[:]
+            for roi_set_name in roi_parent_group.keys():
+                roi_set_group = roi_parent_group[roi_set_name]
+                new_roi = {}
+                new_roi['roi_response'] = list(roi_set_group.get("roi_response")[:])
+                new_roi['roi_mask'] = list(roi_set_group.get("roi_mask")[:])
+                new_roi['roi_image'] = roi_set_group.get("roi_image")[:]
 
-    def getEpochResponseMatrix(self):
+                # get epoch response matrix
+                time_vector, response_matrix = self.getEpochResponseMatrix(new_roi['roi_response'])
+                new_roi['epoch_response'] = response_matrix
+                new_roi['time_vector'] = time_vector
+
+                self.roi[roi_set_name] = new_roi
+
+    def getEpochResponseMatrix(self, roi_response):
         """
         getEpochReponseMatrix(self)
             Takes in long stack response traces and splits them up into each stimulus epoch
@@ -160,7 +172,7 @@ class ImagingDataObject():
                 shape = (num rois, num epochs, num frames per epoch)
         """
         self.response = {}
-        response_trace = np.vstack(self.roi['roi_response'])
+        response_trace = np.vstack(roi_response)
 
         stimulus_start_times = self.stimulus_timing['stimulus_start_times']  # sec
         stimulus_end_times = self.stimulus_timing['stimulus_end_times']  # sec
@@ -197,6 +209,7 @@ class ImagingDataObject():
             if idx is not 0:
                 if len(stack_inds) < epoch_frames:  # missed images for the end of the stimulus
                     cut_inds = np.append(cut_inds, idx)
+                    print('Missed acquisition frames at the end of the stimulus!')
                     continue
             # pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
             new_resp_chunk = response_trace[:, stack_inds]
@@ -207,9 +220,10 @@ class ImagingDataObject():
             new_resp_chunk = (new_resp_chunk - baseline) / baseline;
             response_matrix[:, idx, :] = new_resp_chunk[:,0:epoch_frames]
 
+        if len(cut_inds) > 0:
+            print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)
-        self.response['time_vector'] = time_vector
-        self.response['response_matrix'] = response_matrix
+        return time_vector, response_matrix
 
 
 def find_series(name, obj, sn):
