@@ -140,7 +140,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                 acquisition_group = epoch_run_group.require_group('acquisition')
-                plugin.base.overwriteDataSet(acquisition_group, 'stack_times', response_timing['stack_times'])
+                plugin.base.overwriteDataSet(acquisition_group, 'time_points', response_timing['stack_times'])
                 if 'frame_times' in response_timing:
                     plugin.base.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
                 acquisition_group.attrs['sample_period'] = response_timing['sample_period']
