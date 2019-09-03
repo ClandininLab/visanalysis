@@ -17,7 +17,9 @@ setup(
         'scikit-image',
         'thunder-registration',
         'seaborn',
-        'pyqtgraph'],
+        'pyqtgraph',
+        'LazyHDF5',
+        'pyyaml'],
     include_package_data=True,
     zip_safe=False,
 )
