@@ -235,7 +235,7 @@ class DataGUI(QWidget):
 
     def onTreeItemClicked(self, item, column):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.clearRois()
         self.series_number = None
         if 'series_' in group_path:
@@ -251,7 +251,7 @@ class DataGUI(QWidget):
                 self.redrawRoiTraces()
 
         if group_path != '':
-            attr_dict = self.plugin.getAttributesFromGroup(file_path, group_path)
+            attr_dict = plugin.base.getAttributesFromGroup(file_path, group_path)
             if 'series' in group_path.split('/')[-1]:
                 editable_values = False  # don't let user edit epoch parameters
             else:
@@ -318,7 +318,7 @@ class DataGUI(QWidget):
 
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         group_name = group_path.split('/')[-1]
 
         buttonReply = QMessageBox.question(self,
@@ -326,7 +326,7 @@ class DataGUI(QWidget):
                                            "Are you sure you want to delete group {}?".format(group_name),
                                            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if buttonReply == QMessageBox.Yes:
-            self.plugin.deleteGroup(file_path=file_path,
+            plugin.base.deleteGroup(file_path=file_path,
                                     group_path=group_path)
             print('Deleted group {}'.format(group_name))
             self.populateGroups()
@@ -335,7 +335,7 @@ class DataGUI(QWidget):
 
     def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.group_dset_dict = self.plugin.getHierarchy(file_path)
+        self.group_dset_dict = plugin.base.getHierarchy(file_path)
         self._populateTree(self.groupTree, self.group_dset_dict)
 
     def populate_attrs(self, attr_dict=None, editable_values = False):
@@ -363,13 +363,13 @@ class DataGUI(QWidget):
 
     def update_attrs_to_file(self, item):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
 
         attr_key = self.tableAttributes.item(item.row(),0).text()
         attr_val = item.text()
 
         # update attr in file
-        self.plugin.changeAttribute(file_path=file_path,
+        plugin.base.changeAttribute(file_path=file_path,
                                     group_path=group_path,
                                     attr_key=attr_key,
                                     attr_val=attr_val)
@@ -474,7 +474,7 @@ class DataGUI(QWidget):
 
     def loadRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        roi_set_path = self.plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        roi_set_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.roi_response, self.roi_image, self.roi_path, self.roi_mask = roi.loadRoiSet(file_path, roi_set_path)
 
     def saveRois(self):
