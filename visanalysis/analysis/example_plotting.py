@@ -13,3 +13,6 @@ shared_analysis.plotResponseByCondition(ID, roi_name=roi_name, condition='curren
 
 # %%
 shared_analysis.plotRoiResponses(ID, roi_name=roi_name)
+
+# %%
+ID.generateRoiMap(roi_name=roi_name)

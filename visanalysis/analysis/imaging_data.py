@@ -13,7 +13,7 @@ import seaborn as sns
 import scipy.signal as signal
 import functools
 
-# from visanalysis import plot_tools
+from visanalysis import plot_tools
 
 
 class ImagingDataObject():
@@ -23,9 +23,11 @@ class ImagingDataObject():
         self.series_number = series_number
         self.file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
 
-        # Retrieve: stimulus_parameters
+        # Retrieve from file: stimulus_parameters
         self.getRunParameters()
         self.getEpochParameters()
+        # Retrieve:
+        self.getFlyMetadata()
         # Retrieve: photodiode_trace, photodiode_time_vector, photodiode_sample_rate
         self.getPhotodiodeData()
         # Retrieve: response_timing
@@ -57,6 +59,15 @@ class ImagingDataObject():
                 for attr_key in epoch.attrs:
                     new_params[attr_key] = epoch.attrs[attr_key]
                 self.epoch_parameters.append(new_params)
+
+    def getFlyMetadata(self):
+        with h5py.File(self.file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=self.series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            fly_group = epoch_run_group.parent.parent
+            self.fly_metadata = {}
+            for attr_key in fly_group.attrs:
+                self.fly_metadata[attr_key] = fly_group.attrs[attr_key]
 
     def getPhotodiodeData(self):
         with h5py.File(self.file_path, 'r') as experiment_file:
@@ -224,6 +235,18 @@ class ImagingDataObject():
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)
         return time_vector, response_matrix
+
+    def generateRoiMap(self, roi_name, scale_bar_length=0):
+        newImage = plot_tools.overlayImage(self.roi.get(roi_name).get('roi_image'), self.roi.get(roi_name).get('roi_mask'), 0.5, self.colors)
+
+        fh = plt.figure(figsize=(4,4))
+        ax = fh.add_subplot(111)
+        ax.imshow(newImage)
+        ax.set_aspect('equal')
+        ax.set_axis_off()
+        if scale_bar_length > 0:
+            microns_per_pixel = float(self.metadata['micronsPerPixel_XAxis'])
+            plot_tools.addImageScaleBar(ax, newImage, scale_bar_length, microns_per_pixel, 'lr')
 
 
 def find_series(name, obj, sn):
