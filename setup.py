@@ -18,7 +18,6 @@ setup(
         'thunder-registration',
         'seaborn',
         'pyqtgraph',
-        'LazyHDF5',
         'pyyaml'],
     include_package_data=True,
     zip_safe=False,
