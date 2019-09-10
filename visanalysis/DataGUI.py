@@ -25,6 +25,9 @@ import os
 
 from visanalysis import roi, plot_tools, plugin
 
+#TODO: robustness to select groups before data attached or directory chosen. is data attached?
+#TODO: zoom in on roi drawing image
+
 
 class DataGUI(QWidget):
 

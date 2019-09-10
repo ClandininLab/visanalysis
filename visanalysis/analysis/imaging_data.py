@@ -86,8 +86,8 @@ class ImagingDataObject():
             acquisition_group = epoch_run_group['acquisition']
 
             self.response_timing = {}
-            self.response_timing['time_vector'] = acquisition_group.get('time_points')[:]
-            self.response_timing['sample_period'] = acquisition_group.attrs['sample_period']
+            self.response_timing['time_vector'] = acquisition_group.get('time_points')[:]  # sec
+            self.response_timing['sample_period'] = acquisition_group.attrs['sample_period']  # sec
 
     def computeEpochAndFrameTiming(self,
                                    plot_trace_flag=True,

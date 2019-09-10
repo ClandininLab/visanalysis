@@ -20,9 +20,9 @@ from visanalysis import plugin, plot_tools
 # Functions for random access poi data from AODscope / Karthala
 ##############################################################################
 
-# TODO: poi picker / grouper
 # TODO: special assignment for background pois?
 # TODO: PMT 1 or 2 selection
+# TODO: attach sample_period as attr to acquisition group
 
 
 class AodScopePlugin(plugin.base.BasePlugin):
@@ -112,9 +112,14 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 plugin.base.overwriteDataSet(acquisition_group, 'poi_data_matrix', poi_data['poi_data_matrix'])
                 plugin.base.overwriteDataSet(acquisition_group, 'poi_xy', poi_data['poi_xy'])
 
+                n_pts = float(metadata['random acess 2']['nbr of point'].replace('"',''))
                 for outer_k in metadata.keys():
                     for inner_k in metadata[outer_k].keys():
                         acquisition_group.attrs[outer_k + '/' + inner_k] = metadata[outer_k][inner_k]
+                        if 'aquisition time / points' in (inner_k):
+                            pt_per = float(metadata[outer_k][inner_k].replace('"', ''))  # usec per poi
+                            sample_period = (pt_per/1e6)*n_pts  # sec per cycle (all pois)
+                            acquisition_group.attrs['sample_period'] = sample_period  # sec per cycle (all pois)
 
                 plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_data['poi_locations'])
                 plugin.base.overwriteDataSet(acquisition_group, "snap_image", poi_data['snap_image'])
@@ -128,7 +133,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
         try:
             tdms_file = TdmsFile(full_file_path)
 
-            time_points = tdms_file.channel_data('PMT'+str(pmt),'POI time') #msec
+            time_points = tdms_file.channel_data('PMT'+str(pmt),'POI time') / 1e3  # msec -> sec
             poi_data_matrix = np.ndarray(shape = (len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
             poi_data_matrix[:] = np.nan
 
