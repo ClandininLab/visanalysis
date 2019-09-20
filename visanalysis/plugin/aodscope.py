@@ -129,9 +129,11 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 print('File not found at {}'.format(raw_file_path))
                 continue
 
-            # TODO: get time_points from acquisition timing
+            response_timing = self.getAcquisitionTiming(experiment_file_name,
+                                                        data_directory,
+                                                        xyt_series_number)
 
-            registered_series = self.registerStack(image_series, time_points)
+            registered_series = self.registerStack(image_series, response_timing['time_points'])
             save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
             print('Saved: ' + save_path)
             imsave(save_path, registered_series)
@@ -224,6 +226,11 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                         xyt_series_number,
                                         'xyt')
 
+            # Imaging acquisition timing information
+            response_timing = self.getAcquisitionTiming(experiment_file_name,
+                                                        data_directory,
+                                                        xyt_series_number)
+
             # # # # Attach metadata to epoch run group in data file # # #
             with h5py.File(file_path, 'r+') as experiment_file:
                 find_partial = functools.partial(find_series, sn=series_number)
@@ -236,9 +243,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                 acquisition_group = epoch_run_group.require_group('acquisition')
-                # TODO: add time vector / acq sample rate for xyt data, as below...
-                # plugin.base.overwriteDataSet(acquisition_group, 'time_points', time_points)
-                # acquisition_group.attrs['sample_period'] = sample_period
+                plugin.base.overwriteDataSet(acquisition_group, 'time_points', response_timing['time_points'])
+                acquisition_group.attrs['sample_period'] = response_timing['sample_period']
 
                 for outer_k in metadata.keys():
                     for inner_k in metadata[outer_k].keys():
@@ -355,6 +361,38 @@ class AodScopePlugin(plugin.base.BasePlugin):
         metadata = config._sections
 
         return metadata
+
+    def getAcquisitionTiming(self, experiment_file_name, data_directory, xyt_series_number):
+        stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]
+        date_code = stack_dir[-9:-1]
+        stack_name = date_code + '_' + 'stack' + ('0000' + str(xyt_series_number))[-4:]
+        full_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + 'para.xml')
+
+        with open(full_file_path) as strfile:
+            xmlString = strfile.read()
+        french_parser = ET.XMLParser(encoding="ISO-8859-1")
+        parameters = ET.fromstring(xmlString, parser=french_parser)
+
+        n_pts = [int(float(x.find('{http://www.ni.com/LVData}Val').text)) for x in
+                      parameters.findall(".//{http://www.ni.com/LVData}I32") if
+                      x.find('{http://www.ni.com/LVData}Name').text == 'Number of points '][0]
+
+        per_pt = [float(x.find('{http://www.ni.com/LVData}Val').text) for x in
+                      parameters.findall(".//{http://www.ni.com/LVData}DBL") if
+                      x.find('{http://www.ni.com/LVData}Name').text == 'aquisition time / points (µs)'][0] # usec per poi
+
+        sample_period = (per_pt/1e6)*n_pts  # sec per scan
+
+        xyt_data = self.getXytData(data_directory=data_directory,
+                                   xyt_series_number=xyt_series_number,
+                                   pmt=1)
+
+        time_points = np.arange(0,xyt_data['image_series'].shape[0]) * sample_period
+
+        return {'time_points': time_points,
+                'sample_period': sample_period}
+
+
 
     def getSnapImage(self, data_directory, snap_name, poi_xy, pmt=1):
         full_file_path = os.path.join(data_directory, 'snap', snap_name, snap_name[9:] + '_' + snap_name[:8] + '-snap-' + 'pmt'+str(pmt) + '.tif')
