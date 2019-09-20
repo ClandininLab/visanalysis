@@ -26,8 +26,6 @@ import os
 from visanalysis import roi, plot_tools, plugin
 
 #TODO: robustness to select groups before data attached or directory chosen. is data attached?
-#TODO: zoom in on roi drawing image
-
 
 class DataGUI(QWidget):
 
@@ -192,15 +190,15 @@ class DataGUI(QWidget):
         # # # # Image canvas # # # # # # # # (1, 2)
         self.roi_canvas = MatplotlibWidget()
         toolbar = self.roi_canvas.findChild(QToolBar)
-        toolbar.setVisible(False)
+        toolbar.setVisible(True)
         self.roi_fig = self.roi_canvas.getFigure()
-        # self.roi_fig.canvas.mpl_connect('key_press_event', self.onKeyPress)
         self.roi_ax = self.roi_fig.add_subplot(1, 1, 1)
         self.roi_ax.set_aspect('equal')
         self.roi_ax.set_axis_off()
         self.plot_grid.addWidget(self.roi_canvas, 1, 0)
         self.plot_grid.setRowStretch(0, 1)
         self.plot_grid.setRowStretch(1, 3)
+        self.roi_fig.tight_layout()
 
         self.setWindowTitle('Visanalysis')
         self.setGeometry(200, 200, 1200, 600)

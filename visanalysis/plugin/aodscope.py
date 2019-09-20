@@ -13,6 +13,7 @@ import skimage.io as io
 import functools
 from nptdms import TdmsFile
 import configparser
+import glob
 
 from visanalysis import plugin, plot_tools
 
@@ -22,7 +23,6 @@ from visanalysis import plugin, plot_tools
 
 # TODO: special assignment for background pois?
 # TODO: PMT 1 or 2 selection
-# TODO: attach sample_period as attr to acquisition group
 
 
 class AodScopePlugin(plugin.base.BasePlugin):
@@ -66,7 +66,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
         poi_data = self.getPoiData(poi_directory=data_directory,
                                    poi_series_number=series_number,
                                    pmt=1)
-        # TODO: number of pois as attribute
         indices = []
         for p in roi_path:
             indices.append(p.contains_points(poi_data['poi_locations'], radius=0.5))
@@ -80,21 +79,44 @@ class AodScopePlugin(plugin.base.BasePlugin):
             roi_response = np.mean(selected_poi_data, axis=0)
         return roi_response
 
-    def attachData(self, experiment_file_name, file_path, data_directory):
+    def getPoiAndXytSeriesNumbers(self, file_path):
+        poi_series_number = []
+        xyt_series_number = []
         for series_number in self.getSeriesNumbers(file_path):
+            with h5py.File(file_path, 'r+') as experiment_file:
+                find_partial = functools.partial(find_series, sn=series_number)
+                epoch_run_group = experiment_file.visititems(find_partial)
+                acquisition_group = epoch_run_group.require_group('acquisition')
+                poi_scan = acquisition_group.attrs.get('poi_scan', True)
+                if poi_scan:
+                    poi_series_number.append(series_number)
+                else:
+                    xyt_series_number.append(series_number)
+
+        return poi_series_number, xyt_series_number
+
+    def attachPoiData(self, experiment_file_name, file_path, data_directory, series_numbers):
+        for series_number in series_numbers:
+            with h5py.File(file_path, 'r+') as experiment_file:
+                find_partial = functools.partial(find_series, sn=series_number)
+                epoch_run_group = experiment_file.visititems(find_partial)
+                acquisition_group = epoch_run_group.require_group('acquisition')
+                poi_series_number = acquisition_group.attrs.get('poi_count', series_number)
             # # # # Retrieve metadata from files in data directory # # #
             # Photodiode trace
             frame_monitor, time_vector, sample_rate = self.getPhotodiodeSignal(data_directory,
-                                                                               series_number)
+                                                                               poi_series_number,
+                                                                               'poi')
 
             # Poi data
             poi_data = self.getPoiData(data_directory,
-                                       series_number,
+                                       poi_series_number,
                                        pmt=1)
 
             # Imaging metadata
             metadata = self.getMetaData(data_directory,
-                                        series_number)
+                                        poi_series_number,
+                                        'poi')
 
             # # # # Attach metadata to epoch run group in data file # # #
             with h5py.File(file_path, 'r+') as experiment_file:
@@ -124,7 +146,52 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_data['poi_locations'])
                 plugin.base.overwriteDataSet(acquisition_group, "snap_image", poi_data['snap_image'])
 
-            print('Attached data to series {}'.format(series_number))
+            print('Attached poi data to series {}'.format(series_number))
+
+    def attachXytData(self, experiment_file_name, file_path, data_directory, series_numbers):
+        for series_number in series_numbers:
+            with h5py.File(file_path, 'r+') as experiment_file:
+                find_partial = functools.partial(find_series, sn=series_number)
+                epoch_run_group = experiment_file.visititems(find_partial)
+                acquisition_group = epoch_run_group.require_group('acquisition')
+                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
+            # # # # Retrieve metadata from files in data directory # # #
+            # Photodiode trace
+            frame_monitor, time_vector, sample_rate = self.getPhotodiodeSignal(data_directory,
+                                                                               xyt_series_number,
+                                                                               'xyt')
+
+            # Imaging metadata
+            metadata = self.getMetaData(data_directory,
+                                        xyt_series_number,
+                                        'xyt')
+
+            # # # # Attach metadata to epoch run group in data file # # #
+            with h5py.File(file_path, 'r+') as experiment_file:
+                find_partial = functools.partial(find_series, sn=series_number)
+                epoch_run_group = experiment_file.visititems(find_partial)
+
+                # make sure subgroups exist for stimulus and response timing
+                stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
+                plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                stimulus_timing_group.attrs['sample_rate'] = sample_rate
+
+                acquisition_group = epoch_run_group.require_group('acquisition')
+                # TODO: add time vector / acq sample rate for xyt data, as below...
+                # plugin.base.overwriteDataSet(acquisition_group, 'time_points', time_points)
+                # acquisition_group.attrs['sample_period'] = sample_period
+
+                for outer_k in metadata.keys():
+                    for inner_k in metadata[outer_k].keys():
+                        acquisition_group.attrs[outer_k + '/' + inner_k] = metadata[outer_k][inner_k]
+
+            print('Attached xyt data to series {}'.format(series_number))
+
+    def attachData(self, experiment_file_name, file_path, data_directory):
+        poi_series_number, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
+        self.attachPoiData(experiment_file_name, file_path, data_directory, poi_series_number)
+        self.attachXytData(experiment_file_name, file_path, data_directory, xyt_series_number)
 
     def getPoiData(self, poi_directory, poi_series_number, pmt=1):
         poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]
@@ -132,7 +199,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         try:
             tdms_file = TdmsFile(full_file_path)
-
             time_points = tdms_file.channel_data('PMT'+str(pmt),'POI time') / 1e3  # msec -> sec
             poi_data_matrix = np.ndarray(shape = (len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
             poi_data_matrix[:] = np.nan
@@ -147,12 +213,13 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
             # get Snap image and poi locations in snap coordinates
             metadata = self.getMetaData(poi_directory,
-                                        poi_series_number)
+                                        poi_series_number,
+                                        'poi')
             snap_name = metadata['Image']['name'].replace('"', '')
             snap_ct = 0
             while (('points' in snap_name) and (snap_ct < 1000)):  # used snap image from a previous POI scan
                 snap_ct += 1
-                alt_dict = self.getMetaData(poi_directory, int(snap_name[6:]))
+                alt_dict = self.getMetaData(poi_directory, int(snap_name[6:]), 'poi')
                 temp_image = alt_dict.get('Image')
                 if temp_image is not None:
                     snap_name = temp_image['name'].replace('"', '')
@@ -173,9 +240,15 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 'snap_settings': snap_settings,
                 'poi_locations': poi_locations}
 
-    def getPhotodiodeSignal(self, data_directory, series_number):
-        poi_name = 'points' + ('0000' + str(series_number))[-4:]
-        full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '-AnalogIN.tdms')
+    def getPhotodiodeSignal(self, data_directory, series_number, datatype='poi'):
+        if datatype == 'poi':
+            poi_name = 'points' + ('0000' + str(series_number))[-4:]
+            full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '-AnalogIN.tdms')
+        elif datatype == 'xyt':
+            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(series_number))[-4:] + '*/')[0]
+            date_code = stack_dir[-9:-1]
+            stack_name = date_code + '_' + 'stack' + ('0000' + str(series_number))[-4:]
+            full_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '-AnalogIN.tdms')
 
         if os.path.exists(full_file_path):
             tdms_file = TdmsFile(full_file_path)
@@ -195,9 +268,15 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return frame_monitor, time_vector, sample_rate
 
-    def getMetaData(self, data_directory, series_number):
-        poi_name = 'points' + ('0000' + str(series_number))[-4:]
-        full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '.ini')
+    def getMetaData(self, data_directory, series_number, datatype='poi'):
+        if datatype == 'poi':
+            poi_name = 'points' + ('0000' + str(series_number))[-4:]
+            full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '.ini')
+        else:
+            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(series_number))[-4:] + '*/')[0]
+            date_code = stack_dir[-9:-1]
+            stack_name = date_code + '_' + 'stack' + ('0000' + str(series_number))[-4:]
+            full_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '.ini')
 
         config = configparser.ConfigParser()
         config.read(full_file_path)
