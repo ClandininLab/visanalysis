@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib import path
 import h5py
 import skimage.io as io
+from tifffile import imsave
 import functools
 from nptdms import TdmsFile
 import configparser
@@ -106,6 +107,35 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 mask = roi.getRoiMaskFromPath(roi_image, roi_path)
                 roi_response = (np.mean(xyt_data['image_series'][:, mask], axis=1, keepdims=True) - np.min(xyt_data['image_series'])).T
                 return roi_response
+
+    def attachData(self, experiment_file_name, file_path, data_directory):
+        poi_series_number, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
+        self.attachPoiData(experiment_file_name, file_path, data_directory, poi_series_number)
+        self.attachXytData(experiment_file_name, file_path, data_directory, xyt_series_number)
+
+    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
+        print('Registering stacks...')
+        pmt = 1
+        _, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
+        for series_number in xyt_series_number:
+            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(series_number))[-4:] + '*/')[0]
+            date_code = stack_dir[-9:-1]
+            stack_name = date_code + '_' + 'stack' + ('0000' + str(series_number))[-4:]
+            raw_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '_pmt' + str(pmt) + '.tif')
+
+            if os.path.isfile(raw_file_path):
+                image_series = io.imread(raw_file_path)
+            else:
+                print('File not found at {}'.format(raw_file_path))
+                continue
+
+            # TODO: get time_points from acquisition timing
+
+            registered_series = self.registerStack(image_series, time_points)
+            save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
+            print('Saved: ' + save_path)
+            imsave(save_path, registered_series)
+        print('Stacks registered')
 
     def getPoiAndXytSeriesNumbers(self, file_path):
         poi_series_number = []
@@ -215,11 +245,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
                         acquisition_group.attrs[outer_k + '/' + inner_k] = metadata[outer_k][inner_k]
 
             print('Attached xyt data to series {}'.format(series_number))
-
-    def attachData(self, experiment_file_name, file_path, data_directory):
-        poi_series_number, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
-        self.attachPoiData(experiment_file_name, file_path, data_directory, poi_series_number)
-        self.attachXytData(experiment_file_name, file_path, data_directory, xyt_series_number)
 
     def getPoiData(self, data_directory, poi_series_number, pmt=1):
         poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]

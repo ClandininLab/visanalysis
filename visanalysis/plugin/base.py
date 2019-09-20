@@ -1,13 +1,81 @@
 import h5py
 import numpy as np
+from registration import CrossCorr
+"""
+Parent acquisition plugin class
+
+To define a new acquisition plugin, define the indicated methods
+in the plugin subclass to overwrite these placeholders
+
+"""
 
 
 class BasePlugin():
     def __init__(self):
         super().__init__()
 
+    ###########################################################################
+    # Core methods - overwrite these in child plugin definition
+    ###########################################################################
+
+    def getRoiImage(self, **kwargs):
+        """
+        kwargs
+            'data_directory': string, dir. where acquisition data lives (usually user-indicated)
+            'series_number': int, series in hdf5 data file
+            'experiment_file_name': string, name of hdf5 data file
+            'file_path': string, full path to hdf5 data file
+            'pmt': int, which pmt/channel to load
+
+        returns
+            roiImage: 2D image used to draw rois
+        """
+
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+        """
+        args
+            roi_path: matplotlib path object defining roi
+            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
+            series_number: int, series in hdf5 data file
+            experiment_file_name: string, name of hdf5 data file
+            experiment_file_path: string, full path to hdf5 data file
+
+        returns
+            roi_response: 1D numpy array, value of roi intensity as a function of acquisition time point
+        """
+
+    def attachData(self, experiment_file_name, file_path, data_directory):
+        """
+        args
+            experiment_file_name: string, name of hdf5 data file
+            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
+            file_path: string, full path to hdf5 data file
+
+        accesses hdf5 data file and attaches data/metadata to each series
+            -stimulus_timing group:
+                datasets: frame_monitor (a.u.) and time_vector (sec.)
+                attrs: sample_rate ()
+            -acquisition group:
+                datasets: time_points (sec.)
+                attrs: acquisition metadata
+                anything else to stash in there
+        """
+
     def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
+        """
+        args
+            experiment_file_name: string, name of hdf5 data file
+            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
+            file_path: string, full path to hdf5 data file
+
+        looks in indicated data directory and registers/motion corrects images found in there
+        optional to define
+        """
         print('No registration function defined for this plugin')
+
+    ###########################################################################
+    # Shared methods
+    ###########################################################################
 
     def getSeriesNumbers(self, file_path):
         all_series = []
@@ -18,6 +86,29 @@ class BasePlugin():
         all_series = [val for s in all_series for val in s]
         series = [int(x.split('_')[-1]) for x in all_series]
         return series
+
+    def registerStack(self, image_series, time_points):
+        """
+        """
+
+        reference_time_frame = 1  # sec, first frames to use as reference for registration
+        reference_frame = np.where(time_points > reference_time_frame)[0][0]
+
+        reference_image = np.squeeze(np.mean(image_series[0:reference_frame,:,:], axis = 0))
+        register = CrossCorr()
+        model = register.fit(image_series, reference=reference_image)
+
+        registered_series = model.transform(image_series)
+        if len(registered_series.shape) == 3:  # xyt
+            registered_series = registered_series.toseries().toarray().transpose(2,0,1)  # shape t, y, x
+        elif len(registered_series.shape) == 4:  # xyzt
+            registered_series = registered_series.toseries().toarray().transpose(3,0,1,2)  # shape t, z, y, x
+
+        return registered_series
+
+##############################################################################
+# Functions for data file manipulation / access
+##############################################################################
 
 
 def deleteGroup(file_path, group_path):

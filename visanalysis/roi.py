@@ -4,7 +4,6 @@ import functools
 from visanalysis import plugin
 from matplotlib import path
 
-
 def saveRoiSet(file_path, series_number,
                roi_set_name,
                roi_mask,
@@ -35,7 +34,7 @@ def saveRoiSet(file_path, series_number,
             current_roi_index_group = current_roi_group.require_group('roipath_{}'.format(roi_ind))
             for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
                 current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
-                current_roi_path_group.create_dataset("path_vertices", data = p.vertices)
+                plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
 
 
 def loadRoiSet(file_path, roi_set_path):
@@ -87,6 +86,20 @@ def removeRoiSet(file_path, series_number, roi_set_name):
         rois_group = epoch_run_group.get('rois')
         del rois_group[roi_set_name]
         print('Roi group {} from series {} deleted'.format(roi_set_name, series_number))
+
+
+def getAvailableRoiSetNames(file_path, series_number):
+    def find_series(name, obj, sn):
+        target_group_name = 'series_{}'.format(str(sn).zfill(3))
+        if target_group_name in name:
+            return obj
+
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        rois_group = epoch_run_group.get('rois')
+        return list(rois_group.keys())
+
 
 
 def getRoiMaskFromPath(roi_image, roi_path):

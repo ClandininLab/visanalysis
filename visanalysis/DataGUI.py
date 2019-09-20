@@ -483,14 +483,33 @@ class DataGUI(QWidget):
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
-        roi.saveRoiSet(file_path, series_number=self.series_number,
-                     roi_set_name=roi_set_name,
-                     roi_mask=self.roi_mask,
-                     roi_response=self.roi_response,
-                     roi_image=self.roi_image,
-                     roi_path=self.roi_path)
-        print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
-        self.populateGroups()
+        if roi_set_name in roi.getAvailableRoiSetNames(file_path, self.series_number):
+            buttonReply = QMessageBox.question(self,
+                                               'Overwrite roi set',
+                                               "Are you sure you want to overwrite roi set: {}?".format(roi_set_name),
+                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if buttonReply == QMessageBox.Yes:
+                roi.saveRoiSet(file_path,
+                               series_number=self.series_number,
+                               roi_set_name=roi_set_name,
+                               roi_mask=self.roi_mask,
+                               roi_response=self.roi_response,
+                               roi_image=self.roi_image,
+                               roi_path=self.roi_path)
+                print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
+                self.populateGroups()
+            else:
+                print('Overwrite aborted - pick a unique roi set name')
+        else:
+            roi.saveRoiSet(file_path,
+                           series_number=self.series_number,
+                           roi_set_name=roi_set_name,
+                           roi_mask=self.roi_mask,
+                           roi_response=self.roi_response,
+                           roi_image=self.roi_image,
+                           roi_path=self.roi_path)
+            print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
+            self.populateGroups()
 
     def deleteRoi(self):
         if self.current_roi_index < len(self.roi_response):

@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import h5py
 import skimage.io as io
-from registration import CrossCorr
 from tifffile import imsave
 import functools
 
@@ -48,64 +47,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
         mask = roi.getRoiMaskFromPath(roi_image, roi_path)
         roi_response = (np.mean(self.current_series[:, mask], axis=1, keepdims=True) - np.min(self.current_series)).T
         return roi_response
-
-    def loadImageSeries(self, experiment_file_name, data_directory, series_number):
-        image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-        #  Check to see if this series has already been registered
-        raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
-        reg_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
-
-        if os.path.isfile(reg_file_path):
-            image_series = io.imread(reg_file_path)
-        elif os.path.isfile(raw_file_path):
-            image_series = io.imread(raw_file_path)
-            print('!! Warning: no registered series found !!')
-        else:
-            image_series = None
-            print('File not found at {}'.format(raw_file_path))
-
-        return image_series
-
-    def registerStack(self, image_series, response_timing):
-        """
-        """
-
-        reference_time_frame = 1  # sec, first frames to use as reference for registration
-        reference_frame = np.where(response_timing['stack_times'] > reference_time_frame)[0][0]
-
-        reference_image = np.squeeze(np.mean(image_series[0:reference_frame,:,:], axis = 0))
-        register = CrossCorr()
-        model = register.fit(image_series, reference=reference_image)
-
-        registered_series = model.transform(image_series)
-        if len(registered_series.shape) == 3:  # xyt
-            registered_series = registered_series.toseries().toarray().transpose(2,0,1)  # shape t, y, x
-        elif len(registered_series.shape) == 4:  # xyzt
-            registered_series = registered_series.toseries().toarray().transpose(3,0,1,2)  # shape t, z, y, x
-
-        return registered_series
-
-    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
-        print('Registering stacks...')
-        for series_number in self.getSeriesNumbers(file_path):
-            image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-            #  Check to see if this series has already been registered
-            raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
-            if os.path.isfile(raw_file_path):
-                image_series = io.imread(raw_file_path)
-            else:
-                print('File not found at {}'.format(raw_file_path))
-                continue
-
-            response_timing = self.getAcquisitionTiming(experiment_file_name,
-                                                        data_directory,
-                                                        series_number)
-
-            registered_series = self.registerStack(image_series, response_timing)
-            save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
-            print('Saved: ' + save_path)
-            imsave(save_path, registered_series)
-        print('Stacks registered')
 
     def attachData(self, experiment_file_name, file_path, data_directory):
         for series_number in self.getSeriesNumbers(file_path):
@@ -150,11 +91,48 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
             print('Attached data to series {}'.format(series_number))
 
+    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
+        print('Registering stacks...')
+        for series_number in self.getSeriesNumbers(file_path):
+            image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
+            raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
+            if os.path.isfile(raw_file_path):
+                image_series = io.imread(raw_file_path)
+            else:
+                print('File not found at {}'.format(raw_file_path))
+                continue
+
+            response_timing = self.getAcquisitionTiming(experiment_file_name,
+                                                        data_directory,
+                                                        series_number)
+
+            registered_series = self.registerStack(image_series, response_timing['stack_times'])
+            save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
+            print('Saved: ' + save_path)
+            imsave(save_path, registered_series)
+        print('Stacks registered')
+
+    def loadImageSeries(self, experiment_file_name, data_directory, series_number):
+        image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
+        #  Check to see if this series has already been registered
+        raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
+        reg_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
+
+        if os.path.isfile(reg_file_path):
+            image_series = io.imread(reg_file_path)
+        elif os.path.isfile(raw_file_path):
+            image_series = io.imread(raw_file_path)
+            print('!! Warning: no registered series found !!')
+        else:
+            image_series = None
+            print('File not found at {}'.format(raw_file_path))
+
+        return image_series
 
     # %%
-    ##############################################################################
+    ###########################################################################
     # Functions for timing and metadata
-    ##############################################################################
+    ###########################################################################
 
     def getAcquisitionTiming(self, experiment_file_name, data_directory, series_number):
         """
@@ -227,7 +205,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         return metadata
 
     def getPhotodiodeSignal(self, experiment_file_name, data_directory, series_number,
-                            v_rec_suffix = '_Cycle00001_VoltageRecording_001'):
+                            v_rec_suffix='_Cycle00001_VoltageRecording_001'):
         """
         """
 
