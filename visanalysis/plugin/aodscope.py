@@ -15,7 +15,7 @@ from nptdms import TdmsFile
 import configparser
 import glob
 
-from visanalysis import plugin, plot_tools
+from visanalysis import plugin, plot_tools, roi
 
 ##############################################################################
 # Functions for random access poi data from AODscope / Karthala
@@ -33,51 +33,79 @@ class AodScopePlugin(plugin.base.BasePlugin):
         series_number = kwargs.get('series_number')
         file_path = kwargs.get('file_path')
         pmt = kwargs.get('pmt')
+        data_directory = kwargs.get('data_directory')
         with h5py.File(file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group['acquisition']
+            poi_scan = acquisition_group.attrs.get('poi_scan', True)
+            if poi_scan:  # pull snap image and poi locations from data file
+                try:
+                    snap_image = acquisition_group.get('snap_image')[:]
+                    poi_locations = acquisition_group.get('poi_locations')[:]
+                    poi_mask = []
+                    pixX = np.arange(snap_image.shape[1])
+                    pixY = np.arange(snap_image.shape[0])
+                    yv, xv = np.meshgrid(pixX, pixY)
+                    pix = np.vstack((yv.flatten(), xv.flatten())).T
 
-            snap_image = acquisition_group.get('snap_image')[:]
-            poi_locations = acquisition_group.get('poi_locations')[:]
+                    for poi_loc in poi_locations:
+                        center = poi_loc
+                        new_roi_path = path.Path.circle(center=center, radius=2)
+                        ind = new_roi_path.contains_points(pix, radius=0.5)
 
-        poi_mask = []
-        pixX = np.arange(snap_image.shape[1])
-        pixY = np.arange(snap_image.shape[0])
-        yv, xv = np.meshgrid(pixX, pixY)
-        pix = np.vstack((yv.flatten(), xv.flatten())).T
+                        array = np.zeros(snap_image.shape)
+                        lin = np.arange(array.size)
+                        newArray = array.flatten()
+                        newArray[lin[ind]] = 1
+                        poi_mask.append(newArray.reshape(array.shape))
 
-        for poi_loc in poi_locations:
-            center = poi_loc
-            new_roi_path = path.Path.circle(center=center, radius=2)
-            ind = new_roi_path.contains_points(pix, radius=0.5)
+                    roi_image = plot_tools.overlayImage(snap_image, poi_mask, 1.0)
+                except:
+                    roi_image = None
+                    print('!!Attach data before selecting pois!!')
+            else:  # load image series from data directory and calc. time average
+                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
+                xyt_data = self.getXytData(data_directory=data_directory,
+                                           xyt_series_number=xyt_series_number,
+                                           pmt=pmt)
+                roi_image = np.mean(xyt_data['image_series'], axis=0)
 
-            array = np.zeros(snap_image.shape)
-            lin = np.arange(array.size)
-            newArray = array.flatten()
-            newArray[lin[ind]] = 1
-            poi_mask.append(newArray.reshape(array.shape))
+        return roi_image
 
-        poi_overlay = plot_tools.overlayImage(snap_image, poi_mask, 1.0)
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+        with h5py.File(experiment_file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            acquisition_group = epoch_run_group.require_group('acquisition')
+            poi_scan = acquisition_group.attrs.get('poi_scan', True)
+            if poi_scan:
+                poi_series_number = acquisition_group.attrs.get('poi_count', series_number)
+                poi_data = self.getPoiData(data_directory=data_directory,
+                                           poi_series_number=poi_series_number,
+                                           pmt=1)
+                indices = []
+                for p in roi_path:
+                    indices.append(p.contains_points(poi_data['poi_locations'], radius=0.5))
+                indices = np.vstack(indices).any(axis=0)
 
-        return poi_overlay
+                selected_poi_data = poi_data['poi_data_matrix'][indices, :]
+                if selected_poi_data.shape[0] == 0:
+                    roi_response = None
+                else:
+                    print('Selected {} pois'.format(selected_poi_data.shape[0]))
+                    roi_response = np.mean(selected_poi_data, axis=0)
+                return roi_response
+            else:
+                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
+                xyt_data = self.getXytData(data_directory=data_directory,
+                                           xyt_series_number=xyt_series_number,
+                                           pmt=1)
 
-    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name):
-        poi_data = self.getPoiData(poi_directory=data_directory,
-                                   poi_series_number=series_number,
-                                   pmt=1)
-        indices = []
-        for p in roi_path:
-            indices.append(p.contains_points(poi_data['poi_locations'], radius=0.5))
-        indices = np.vstack(indices).any(axis=0)
-
-        selected_poi_data = poi_data['poi_data_matrix'][indices, :]
-        if selected_poi_data.shape[0] == 0:
-            roi_response = None
-        else:
-            print('Selected {} pois'.format(selected_poi_data.shape[0]))
-            roi_response = np.mean(selected_poi_data, axis=0)
-        return roi_response
+                roi_image = np.mean(xyt_data['image_series'], axis=0)
+                mask = roi.getRoiMaskFromPath(roi_image, roi_path)
+                roi_response = (np.mean(xyt_data['image_series'][:, mask], axis=1, keepdims=True) - np.min(xyt_data['image_series'])).T
+                return roi_response
 
     def getPoiAndXytSeriesNumbers(self, file_path):
         poi_series_number = []
@@ -193,9 +221,9 @@ class AodScopePlugin(plugin.base.BasePlugin):
         self.attachPoiData(experiment_file_name, file_path, data_directory, poi_series_number)
         self.attachXytData(experiment_file_name, file_path, data_directory, xyt_series_number)
 
-    def getPoiData(self, poi_directory, poi_series_number, pmt=1):
+    def getPoiData(self, data_directory, poi_series_number, pmt=1):
         poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]
-        full_file_path = os.path.join(poi_directory, 'points', poi_name, poi_name + '_pmt' + str(pmt) + '.tdms')
+        full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '_pmt' + str(pmt) + '.tdms')
 
         try:
             tdms_file = TdmsFile(full_file_path)
@@ -212,19 +240,19 @@ class AodScopePlugin(plugin.base.BasePlugin):
             poi_xy = np.array(list(zip(poi_x, poi_y)))
 
             # get Snap image and poi locations in snap coordinates
-            metadata = self.getMetaData(poi_directory,
+            metadata = self.getMetaData(data_directory,
                                         poi_series_number,
                                         'poi')
             snap_name = metadata['Image']['name'].replace('"', '')
             snap_ct = 0
             while (('points' in snap_name) and (snap_ct < 1000)):  # used snap image from a previous POI scan
                 snap_ct += 1
-                alt_dict = self.getMetaData(poi_directory, int(snap_name[6:]), 'poi')
+                alt_dict = self.getMetaData(data_directory, int(snap_name[6:]), 'poi')
                 temp_image = alt_dict.get('Image')
                 if temp_image is not None:
                     snap_name = temp_image['name'].replace('"', '')
 
-            snap_image, snap_settings, poi_locations = self.getSnapImage(poi_directory,
+            snap_image, snap_settings, poi_locations = self.getSnapImage(data_directory,
                                                                          snap_name,
                                                                          poi_xy,
                                                                          pmt=1)
@@ -239,6 +267,24 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 'snap_image': snap_image,
                 'snap_settings': snap_settings,
                 'poi_locations': poi_locations}
+
+    def getXytData(self, data_directory, xyt_series_number, pmt=1):
+        stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]
+        date_code = stack_dir[-9:-1]
+        stack_name = date_code + '_' + 'stack' + ('0000' + str(xyt_series_number))[-4:]
+        raw_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '_pmt' + str(pmt) + '.tif')
+        reg_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '_pmt' + str(pmt) + '_reg.tif')
+
+        if os.path.isfile(reg_file_path):
+            image_series = io.imread(reg_file_path)
+        elif os.path.isfile(raw_file_path):
+            image_series = io.imread(raw_file_path)
+            print('!! Warning: no registered series found !!')
+        else:
+            image_series = None
+            print('File not found at {}'.format(raw_file_path))
+
+        return {'image_series': image_series}
 
     def getPhotodiodeSignal(self, data_directory, series_number, datatype='poi'):
         if datatype == 'poi':
@@ -285,19 +331,19 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return metadata
 
-    def getSnapImage(self, poi_directory, snap_name, poi_xy, pmt=1):
-        full_file_path = os.path.join(poi_directory, 'snap', snap_name, snap_name[9:] + '_' + snap_name[:8] + '-snap-' + 'pmt'+str(pmt) + '.tif')
+    def getSnapImage(self, data_directory, snap_name, poi_xy, pmt=1):
+        full_file_path = os.path.join(data_directory, 'snap', snap_name, snap_name[9:] + '_' + snap_name[:8] + '-snap-' + 'pmt'+str(pmt) + '.tif')
         if os.path.exists(full_file_path):
             snap_image = io.imread(full_file_path)
 
-            roi_para_file_path = os.path.join(poi_directory, 'snap', snap_name,
+            roi_para_file_path = os.path.join(data_directory, 'snap', snap_name,
                                               snap_name[9:] + '_' + snap_name[:8] + 'para.roi')
             roi_root = ET.parse(roi_para_file_path).getroot()
             ArrayNode = roi_root.find('{http://www.ni.com/LVData}Cluster/{http://www.ni.com/LVData}Array')
             snap_dims = [int(x.find('{http://www.ni.com/LVData}Val').text) for x in
                          ArrayNode.findall('{http://www.ni.com/LVData}I32')]
 
-            snap_para_file_path = os.path.join(poi_directory, 'snap', snap_name,
+            snap_para_file_path = os.path.join(data_directory, 'snap', snap_name,
                                                snap_name[9:] + '_' + snap_name[:8] + 'para.xml')
 
             with open(snap_para_file_path) as strfile:

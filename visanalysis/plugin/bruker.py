@@ -40,7 +40,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             roi_image = np.mean(self.current_series, axis=0)  # avg across time
         return roi_image
 
-    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name):
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
             self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)

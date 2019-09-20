@@ -441,10 +441,12 @@ class DataGUI(QWidget):
 
     def updateRoiSelection(self, new_roi_path):
         mask = roi.getRoiMaskFromPath(self.roi_image, new_roi_path)
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         self.new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
                                                            data_directory=self.data_directory,
                                                            series_number=self.series_number,
-                                                           experiment_file_name=self.experiment_file_name)
+                                                           experiment_file_name=self.experiment_file_name,
+                                                           experiment_file_path=file_path)
         if self.new_roi_resp is None:
             print('No pixels in selected roi')
             return
