@@ -116,11 +116,16 @@ class AodScopePlugin(plugin.base.BasePlugin):
     def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
         print('Registering stacks...')
         pmt = 1
-        _, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
-        for series_number in xyt_series_number:
-            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(series_number))[-4:] + '*/')[0]
+        _, series_numbers = self.getPoiAndXytSeriesNumbers(file_path)
+        for series_number in series_numbers:
+            with h5py.File(file_path, 'r') as experiment_file:
+                find_partial = functools.partial(find_series, sn=series_number)
+                epoch_run_group = experiment_file.visititems(find_partial)
+                acquisition_group = epoch_run_group.require_group('acquisition')
+                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
+            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]
             date_code = stack_dir[-9:-1]
-            stack_name = date_code + '_' + 'stack' + ('0000' + str(series_number))[-4:]
+            stack_name = date_code + '_' + 'stack' + ('0000' + str(xyt_series_number))[-4:]
             raw_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '_pmt' + str(pmt) + '.tif')
 
             if os.path.isfile(raw_file_path):
@@ -146,7 +151,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
             with h5py.File(file_path, 'r+') as experiment_file:
                 find_partial = functools.partial(find_series, sn=series_number)
                 epoch_run_group = experiment_file.visititems(find_partial)
-                acquisition_group = epoch_run_group.require_group('acquisition')
+                acquisition_group = epoch_run_group['acquisition']
                 poi_scan = acquisition_group.attrs.get('poi_scan', True)
                 if poi_scan:
                     poi_series_number.append(series_number)
@@ -391,8 +396,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return {'time_points': time_points,
                 'sample_period': sample_period}
-
-
 
     def getSnapImage(self, data_directory, snap_name, poi_xy, pmt=1):
         full_file_path = os.path.join(data_directory, 'snap', snap_name, snap_name[9:] + '_' + snap_name[:8] + '-snap-' + 'pmt'+str(pmt) + '.tif')
