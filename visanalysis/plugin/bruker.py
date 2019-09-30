@@ -14,7 +14,7 @@ from tifffile import imsave
 import functools
 
 
-from visanalysis import plugin, roi
+from visanalysis import plugin
 
 
 ##############################################################################
@@ -43,10 +43,36 @@ class BrukerPlugin(plugin.base.BasePlugin):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
             self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
-        roi_image = np.mean(self.current_series, axis=0)
-        mask = roi.getRoiMaskFromPath(roi_image, roi_path)
+        mask = self.getRoiMaskFromPath(roi_path, data_directory, series_number, experiment_file_name, experiment_file_path)
         roi_response = (np.mean(self.current_series[:, mask], axis=1, keepdims=True) - np.min(self.current_series)).T
         return roi_response
+
+    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+        kwargs = {'data_directory': data_directory,
+                  'series_number': series_number,
+                  'experiment_file_name': experiment_file_name,
+                  'file_path': experiment_file_path,
+                  'pmt': 1}
+        roi_image = self.getRoiImage(**kwargs)
+        pixX = np.arange(roi_image.shape[1])
+        pixY = np.arange(roi_image.shape[0])
+        yv, xv = np.meshgrid(pixX, pixY)
+        roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
+
+        indices = []
+        for p in roi_path:
+            indices.append(p.contains_points(roi_pix, radius=0.5))
+        indices = np.vstack(indices).any(axis=0)
+
+        array = np.zeros((roi_image.shape[0], roi_image.shape[1]))
+        lin = np.arange(array.size)
+        newRoiArray = array.flatten()
+        newRoiArray[lin[indices]] = 1
+        newRoiArray = newRoiArray.reshape(array.shape)
+
+        mask = newRoiArray == 1  # convert to boolean for masking
+
+        return mask
 
     def attachData(self, experiment_file_name, file_path, data_directory):
         for series_number in self.getSeriesNumbers(file_path):

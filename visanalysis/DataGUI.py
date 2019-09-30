@@ -23,9 +23,8 @@ import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 
-from visanalysis import roi, plot_tools, plugin
+from visanalysis import plot_tools, plugin
 
-#TODO: robustness to select groups before data attached or directory chosen. is data attached?
 
 class DataGUI(QWidget):
 
@@ -440,8 +439,8 @@ class DataGUI(QWidget):
         self.updateRoiSelection([self.new_roi_path])
 
     def updateRoiSelection(self, new_roi_path):
-        mask = roi.getRoiMaskFromPath(self.roi_image, new_roi_path)
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        mask = self.plugin.getRoiMaskFromPath(new_roi_path, self.data_directory, self.series_number, self.experiment_file_name, file_path)
         self.new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
                                                            data_directory=self.data_directory,
                                                            series_number=self.series_number,
@@ -478,18 +477,18 @@ class DataGUI(QWidget):
     def loadRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
-        self.roi_response, self.roi_image, self.roi_path, self.roi_mask = roi.loadRoiSet(file_path, roi_set_path)
+        self.roi_response, self.roi_image, self.roi_path, self.roi_mask = self.plugin.loadRoiSet(file_path, roi_set_path)
 
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
-        if roi_set_name in roi.getAvailableRoiSetNames(file_path, self.series_number):
+        if roi_set_name in plugin.base.getAvailableRoiSetNames(file_path, self.series_number):
             buttonReply = QMessageBox.question(self,
                                                'Overwrite roi set',
                                                "Are you sure you want to overwrite roi set: {}?".format(roi_set_name),
                                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if buttonReply == QMessageBox.Yes:
-                roi.saveRoiSet(file_path,
+                self.plugin.saveRoiSet(file_path,
                                series_number=self.series_number,
                                roi_set_name=roi_set_name,
                                roi_mask=self.roi_mask,
@@ -501,7 +500,7 @@ class DataGUI(QWidget):
             else:
                 print('Overwrite aborted - pick a unique roi set name')
         else:
-            roi.saveRoiSet(file_path,
+            self.plugin.saveRoiSet(file_path,
                            series_number=self.series_number,
                            roi_set_name=roi_set_name,
                            roi_mask=self.roi_mask,

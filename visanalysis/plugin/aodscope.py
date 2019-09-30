@@ -16,7 +16,7 @@ from nptdms import TdmsFile
 import configparser
 import glob
 
-from visanalysis import plugin, plot_tools, roi
+from visanalysis import plugin, plot_tools
 
 ##############################################################################
 # Functions for random access poi data from AODscope / Karthala
@@ -52,7 +52,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
                     for poi_loc in poi_locations:
                         center = poi_loc
-                        new_roi_path = path.Path.circle(center=center, radius=2)
+                        new_roi_path = path.Path.circle(center=center, radius=1)
                         ind = new_roi_path.contains_points(pix, radius=0.5)
 
                         array = np.zeros(snap_image.shape)
@@ -74,6 +74,63 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return roi_image
 
+    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+        with h5py.File(experiment_file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            acquisition_group = epoch_run_group.require_group('acquisition')
+            poi_scan = acquisition_group.attrs.get('poi_scan', True)
+            if poi_scan:
+                poi_series_number = acquisition_group.attrs.get('poi_count', series_number)
+                poi_data = self.getPoiData(data_directory=data_directory,
+                                           poi_series_number=poi_series_number,
+                                           pmt=1)
+                poi_numbers = getPoiNumbersFromPath(roi_path, poi_data['poi_locations'])
+                pixX = np.arange(poi_data['snap_image'].shape[1])
+                pixY = np.arange(poi_data['snap_image'].shape[0])
+                yv, xv = np.meshgrid(pixX, pixY)
+                pix = np.vstack((yv.flatten(), xv.flatten())).T
+
+                mask = []
+                for pn in poi_numbers:
+                    center = [poi_data['poi_locations'][pn][0], poi_data['poi_locations'][pn][1]]
+                    new_roi_path = path.Path.circle(center=center, radius=2)
+                    ind = new_roi_path.contains_points(pix, radius=0.5)
+                    array = np.zeros(poi_data['snap_image'].shape)
+                    lin = np.arange(array.size)
+                    newArray = array.flatten()
+                    newArray[lin[ind]] = 1
+                    mask.append(newArray.reshape(array.shape))
+                mask = np.stack(mask, axis=2).any(axis=2)
+
+            else:  # xyt scan
+                kwargs = {'data_directory': data_directory,
+                          'series_number': series_number,
+                          'experiment_file_name': experiment_file_name,
+                          'file_path': experiment_file_path,
+                          'pmt': 1}
+                roi_image = self.getRoiImage(**kwargs)
+
+                pixX = np.arange(roi_image.shape[1])
+                pixY = np.arange(roi_image.shape[0])
+                yv, xv = np.meshgrid(pixX, pixY)
+                roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
+
+                indices = []
+                for p in roi_path:
+                    indices.append(p.contains_points(roi_pix, radius=0.5))
+                indices = np.vstack(indices).any(axis=0)
+
+                array = np.zeros((roi_image.shape[0], roi_image.shape[1]))
+                lin = np.arange(array.size)
+                newRoiArray = array.flatten()
+                newRoiArray[lin[indices]] = 1
+                newRoiArray = newRoiArray.reshape(array.shape)
+
+                mask = newRoiArray == 1  # convert to boolean for masking
+
+        return mask
+
     def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         with h5py.File(experiment_file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=series_number)
@@ -85,12 +142,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 poi_data = self.getPoiData(data_directory=data_directory,
                                            poi_series_number=poi_series_number,
                                            pmt=1)
-                indices = []
-                for p in roi_path:
-                    indices.append(p.contains_points(poi_data['poi_locations'], radius=0.5))
-                indices = np.vstack(indices).any(axis=0)
-
-                selected_poi_data = poi_data['poi_data_matrix'][indices, :]
+                poi_numbers = getPoiNumbersFromPath(roi_path, poi_data['poi_locations'])
+                selected_poi_data = poi_data['poi_data_matrix'][poi_numbers, :]
                 if selected_poi_data.shape[0] == 0:
                     roi_response = None
                 else:
@@ -104,7 +157,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                            pmt=1)
 
                 roi_image = np.mean(xyt_data['image_series'], axis=0)
-                mask = roi.getRoiMaskFromPath(roi_image, roi_path)
+                mask = self.getRoiMaskFromPath(roi_path, data_directory, series_number, experiment_file_name, experiment_file_path)
                 roi_response = (np.mean(xyt_data['image_series'][:, mask], axis=1, keepdims=True) - np.min(xyt_data['image_series'])).T
                 return roi_response
 
@@ -143,6 +196,43 @@ class AodScopePlugin(plugin.base.BasePlugin):
             print('Saved: ' + save_path)
             imsave(save_path, registered_series)
         print('Stacks registered')
+
+    def saveRoiSet(self, file_path, series_number,
+                   roi_set_name,
+                   roi_mask,
+                   roi_response,
+                   roi_image,
+                   roi_path):
+
+        with h5py.File(file_path, 'r+') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            parent_roi_group = epoch_run_group.require_group('rois')
+            acquisition_group = epoch_run_group.require_group('acquisition')
+            poi_scan = acquisition_group.attrs.get('poi_scan', True)
+            current_roi_group = parent_roi_group.require_group(roi_set_name)
+
+            plugin.base.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
+            plugin.base.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
+            plugin.base.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
+
+            for dataset_key in current_roi_group.keys():
+                if 'path_vertices' in dataset_key:
+                    del current_roi_group[dataset_key]
+
+            if poi_scan:
+                poi_numbers = []
+                poi_locations = acquisition_group.get("poi_locations")
+            for roi_ind, roi_paths in enumerate(roi_path):  # for roi indices
+                current_roi_index_group = current_roi_group.require_group('roipath_{}'.format(roi_ind))
+                if poi_scan:
+                    poi_numbers.append(getPoiNumbersFromPath(roi_paths, poi_locations))
+                for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
+                    current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
+                    plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
+
+            if poi_scan:
+                current_roi_group.attrs['poi_numbers'] = np.hstack(poi_numbers)
 
     def getPoiAndXytSeriesNumbers(self, file_path):
         poi_series_number = []
@@ -437,6 +527,16 @@ class AodScopePlugin(plugin.base.BasePlugin):
             print('Warning no snap image found at: ' + full_file_path)
 
         return snap_image, snap_settings, poi_locations
+
+
+def getPoiNumbersFromPath(roi_path, poi_locations):
+    poi_bool = []
+    if not isinstance(roi_path, list):
+        roi_path = [roi_path]
+    for p in roi_path:
+        poi_bool.append(p.contains_points(poi_locations, radius=0.5))
+    poi_numbers = np.where(np.vstack(poi_bool).any(axis=0))[0]
+    return poi_numbers
 
 
 def find_series(name, obj, sn):
