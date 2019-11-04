@@ -93,7 +93,7 @@ class ImagingDataObject():
                                    plot_trace_flag=True,
                                    threshold=0.6,
                                    minimum_epoch_separation=2e3,  # datapoints
-                                   frame_slop=10,  # datapoints +/- ideal frame duration
+                                   frame_slop=2000000,  # datapoints +/- ideal frame duration
                                    command_frame_rate=120):
         """
         getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate)
