@@ -137,8 +137,8 @@ class ImagingDataObject():
         frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
 
         if plot_trace_flag:
-            fh = plt.figure()
-            ax = fh.add_subplot(111)
+            self.frame_monitor_figure = plt.figure()
+            ax = self.frame_monitor_figure.add_subplot(111)
             ax.plot(time_vector, frame_monitor)
             ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape),'ko')
             ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
@@ -167,6 +167,7 @@ class ImagingDataObject():
 
                 # get epoch response matrix
                 time_vector, response_matrix = self.getEpochResponseMatrix(new_roi['roi_response'])
+
                 new_roi['epoch_response'] = response_matrix
                 new_roi['time_vector'] = time_vector
 
@@ -233,6 +234,7 @@ class ImagingDataObject():
 
         if len(cut_inds) > 0:
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
+            print('aaaaaaa')
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)
         return time_vector, response_matrix
 

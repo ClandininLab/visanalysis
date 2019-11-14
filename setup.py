@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='visanalysis',
     version='0.1.0',
-    description='Analysis environment for flystim experiments',
+    description='Analysis environment for visprotocol experiments',
     url='https://github.com/ClandininLab/visanalysis',
     author='Max Turner',
     author_email='mhturner@stanford.edu',
@@ -17,8 +17,10 @@ setup(
         'scikit-image',
         'thunder-registration',
         'seaborn',
-        'pyqtgraph',
-        'pyyaml'],
+        'PyQtGraph',
+        'pyyaml',
+        'matplotlib',
+        'npTDMS'],
     include_package_data=True,
     zip_safe=False,
 )

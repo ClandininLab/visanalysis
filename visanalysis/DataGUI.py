@@ -16,7 +16,7 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider,
-                             QMessageBox, QTreeWidget, QTreeWidgetItem)
+                             QMessageBox, QTreeWidget, QTreeWidgetItem, QCheckBox)
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
@@ -44,6 +44,8 @@ class DataGUI(QWidget):
         self.roi_path = []
         self.roi_image = []
         self.roi_path_list = []
+        self.roi_z_list =[]
+        self.current_z_slice = 0
 
         self.blank_image = np.zeros((1,1))
 
@@ -109,7 +111,7 @@ class DataGUI(QWidget):
         # # # # Group control: # # # # # # # # (0, 1)
         deleteGroupButton = QPushButton("Delete selected group", self)
         deleteGroupButton.clicked.connect(self.deleteSelectedGroup)
-        self.group_control_grid.addWidget(deleteGroupButton, 7, 0, 1, 2)
+        self.group_control_grid.addWidget(deleteGroupButton, 0, 0, 1, 2)
 
         # # # # Attribute table: # # # # # # # # (1, 1)
         self.tableAttributes = QTableWidget()
@@ -197,6 +199,16 @@ class DataGUI(QWidget):
         self.plot_grid.addWidget(self.roi_canvas, 1, 0)
         self.plot_grid.setRowStretch(0, 1)
         self.plot_grid.setRowStretch(1, 3)
+        self.plot_grid.setRowStretch(2, 3)
+
+        # Current z slice slider
+        self.zSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.zSlider.setMinimum(0)
+        self.zSlider.setMaximum(50)
+        self.zSlider.setValue(0)
+        self.zSlider.valueChanged.connect(self.zSliderUpdated)
+        self.plot_grid.addWidget(self.zSlider, 2, 0)
+
         self.roi_fig.tight_layout()
 
         self.setWindowTitle('Visanalysis')
@@ -265,9 +277,14 @@ class DataGUI(QWidget):
                           'series_number': self.series_number,
                           'experiment_file_name': self.experiment_file_name,
                           'file_path': file_path,
-                          'pmt': 1}
+                          'pmt': 1,
+                          'z_slice': self.current_z_slice}
                 self.roi_image = self.plugin.getRoiImage(**kwargs)
                 if self.roi_image is not None:
+                    if self.plugin.volume_analysis:
+                        self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
+                    else:
+                        self.zSlider.setMaximum(0)
                     self.redrawRoiTraces()
 
             else:
@@ -382,7 +399,7 @@ class DataGUI(QWidget):
         init_lasso = False
         if len(self.roi_image) > 0:
             if len(self.roi_mask) > 0:
-                newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask , 0.5, self.colors)
+                newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask, 0.5, self.colors, z=self.current_z_slice)
             else:
                 newImage = self.roi_image
             self.roi_ax.imshow(newImage, cmap=cm.gray)
@@ -393,6 +410,7 @@ class DataGUI(QWidget):
         self.roi_canvas.draw()
 
         self.roi_path_list = []
+        self.roi_z_list  = []
         if init_lasso:
             if self.roi_type == 'circle':
                 self.lasso_1 = EllipseSelector(self.roi_ax, onselect=self.newEllipse, button=1)
@@ -404,18 +422,19 @@ class DataGUI(QWidget):
 
     def newFreehand(self, verts):
         new_roi_path = path.Path(verts)
-        self.updateRoiSelection([new_roi_path])
+        self.updateRoiSelection([new_roi_path], [self.zSlider.value()])
 
     def appendFreehand(self, verts):
         print('Appending rois, hit Enter/Return to finish')
         self.roi_path_list.append(path.Path(verts))
+        self.roi_z_list.append(self.zSlider.value())
 
     def keyPressEvent(self, event):
         if type(event) == QtGui.QKeyEvent:
             if np.any([event.key() == QtCore.Qt.Key_Return, event.key() == QtCore.Qt.Key_Enter]):
                 if len(self.roi_path_list) > 0:
                     event.accept()
-                    self.updateRoiSelection(self.roi_path_list)
+                    self.updateRoiSelection(self.roi_path_list, self.roi_z_list)
                 else:
                     event.ignore()
             else:
@@ -436,12 +455,13 @@ class DataGUI(QWidget):
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         self.new_roi_path = path.Path.circle(center = center, radius = radiusX)
-        self.updateRoiSelection([self.new_roi_path])
+        self.updateRoiSelection([self.new_roi_path], [self.zSlider.value()])
 
-    def updateRoiSelection(self, new_roi_path):
+    def updateRoiSelection(self, new_roi_path, z_slices):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        mask = self.plugin.getRoiMaskFromPath(new_roi_path, self.data_directory, self.series_number, self.experiment_file_name, file_path)
+        mask = self.plugin.getRoiMaskFromPath(new_roi_path, z_slices, self.data_directory, self.series_number, self.experiment_file_name, file_path)
         self.new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
+                                                           z_slices=z_slices,
                                                            data_directory=self.data_directory,
                                                            series_number=self.series_number,
                                                            experiment_file_name=self.experiment_file_name,
@@ -463,6 +483,19 @@ class DataGUI(QWidget):
     def sliderUpdated(self):
         self.current_roi_index = self.roiSlider.value()
         self.redrawRoiTraces()
+
+    def zSliderUpdated(self):
+        self.current_z_slice = self.zSlider.value()
+        self.plugin.z_slice = self.current_z_slice
+        kwargs = {'data_directory': self.data_directory,
+                  'series_number': self.series_number,
+                  'experiment_file_name': self.experiment_file_name,
+                  'pmt': 1,
+                  'z_slice': self.current_z_slice}
+        self.roi_image = self.plugin.getRoiImage(**kwargs)
+        if self.roi_image is not None:
+            self.redrawRoiTraces()
+        pass
 
     def redrawRoiTraces(self):
         self.responsePlot.clear()

@@ -12,20 +12,23 @@ import h5py
 import skimage.io as io
 from tifffile import imsave
 import functools
+import nibabel as nib
 
 
 from visanalysis import plugin
 
 
-##############################################################################
-# Functions for image series data from bruker / PV
-##############################################################################
+###########################################################################
+# Bruker plugin
+###########################################################################
 
 class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
         self.current_series = None
         self.current_series_number = 0
+        self.volume_analysis = False
+        self.z_slice = 0
 
     def getRoiImage(self, **kwargs):
         if kwargs.get('series_number') != self.current_series_number:
@@ -36,41 +39,43 @@ class BrukerPlugin(plugin.base.BasePlugin):
         if self.current_series is None:  # No image file found
             roi_image = None
         else:
-            roi_image = np.mean(self.current_series, axis=0)  # avg across time
+            if self.volume_analysis:  # xyzt data
+                roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis = 2)
+            else:  # txy data
+                roi_image = np.mean(self.current_series, axis=0)  # avg across time
         return roi_image
 
-    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiDataFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
             self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
-        mask = self.getRoiMaskFromPath(roi_path, data_directory, series_number, experiment_file_name, experiment_file_path)
-        roi_response = (np.mean(self.current_series[:, mask], axis=1, keepdims=True) - np.min(self.current_series)).T
+
+        mask = self.getRoiMaskFromPath(roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path)
+
+        roi_response = np.mean(self.current_series[mask, :], axis=0, keepdims=True) - np.min(self.current_series)
+
         return roi_response
 
-    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
-        kwargs = {'data_directory': data_directory,
-                  'series_number': series_number,
-                  'experiment_file_name': experiment_file_name,
-                  'file_path': experiment_file_path,
-                  'pmt': 1}
-        roi_image = self.getRoiImage(**kwargs)
-        pixX = np.arange(roi_image.shape[1])
-        pixY = np.arange(roi_image.shape[0])
-        yv, xv = np.meshgrid(pixX, pixY)
-        roi_pix = np.vstack((yv.flatten(), xv.flatten())).T
+    def getRoiMaskFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
+        """
+        roi_path is list of path objects
+        z_slices is a list of associated z slice numbers
 
-        indices = []
-        for p in roi_path:
-            indices.append(p.contains_points(roi_pix, radius=0.5))
-        indices = np.vstack(indices).any(axis=0)
+        """
+        x_dim, y_dim, z_dim, t_dim = self.current_series.shape
 
-        array = np.zeros((roi_image.shape[0], roi_image.shape[1]))
-        lin = np.arange(array.size)
-        newRoiArray = array.flatten()
-        newRoiArray[lin[indices]] = 1
-        newRoiArray = newRoiArray.reshape(array.shape)
+        pixX = np.arange(y_dim)
+        pixY = np.arange(x_dim)
+        xv, yv = np.meshgrid(pixX, pixY)
+        roi_pix = np.vstack((xv.flatten(), yv.flatten())).T
 
-        mask = newRoiArray == 1  # convert to boolean for masking
+        mask = np.zeros(shape=(x_dim, y_dim, z_dim))
+
+        for z_ind, z in enumerate(z_slices):
+            xy_indices = np.reshape(roi_path[z_ind].contains_points(roi_pix, radius=0.5), (x_dim, y_dim))
+            mask[xy_indices, z] = 1
+
+        mask = mask == 1  # convert to boolean for masking
 
         return mask
 
@@ -140,20 +145,26 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
     def loadImageSeries(self, experiment_file_name, data_directory, series_number):
         image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-        #  Check to see if this series has already been registered
-        raw_file_path = os.path.join(data_directory, image_series_name) + '.tif'
-        reg_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
+        # check file name suffix to decide whether this is xyt (.tif) or xyzt (.nii) file
+        tif_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
+        nii_file_path = os.path.join(data_directory, image_series_name) + '_reg.nii'
+        if os.path.isfile(tif_file_path): # TODO fix me
+            image_series = np.expand_dims(np.swapaxes(io.imread(tif_file_path), 0, 2), axis=2)  # txy
+            self.volume_analysis = False
+            print('Loaded xyt image series {}'.format(tif_file_path))
 
-        if os.path.isfile(reg_file_path):
-            image_series = io.imread(reg_file_path)
-        elif os.path.isfile(raw_file_path):
-            image_series = io.imread(raw_file_path)
-            print('!! Warning: no registered series found !!')
+        elif os.path.isfile(nii_file_path):
+            image_series = nib.load(nii_file_path).get_fdata()  # xyzt
+            self.volume_analysis = True
+            print('Loaded xyzt image series {}'.format(nii_file_path))
+
         else:
+            self.volume_analysis = False
             image_series = None
-            print('File not found at {}'.format(raw_file_path))
+            print('File not found at: {} or {}'.format(tif_file_path, nii_file_path))
 
         return image_series
+
 
     # %%
     ###########################################################################
