@@ -34,7 +34,7 @@ class ImagingDataObject():
         self.getResponseTiming()
 
         # Calculate stimulus_timing
-        self.computeEpochAndFrameTiming()
+        self.computeEpochAndFrameTiming(plot_trace_flag=False)
 
         # Get roi responses and calculate epoch response matrix for each
         self.getRoiResponses()
