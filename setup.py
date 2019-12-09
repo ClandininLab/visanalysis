@@ -8,8 +8,7 @@ setup(
     author='Max Turner',
     author_email='mhturner@stanford.edu',
     packages=['visanalysis'],
-    install_requires=[
-        'PyQT5',
+    install_requires=['PyQT5',
         'numpy',
         'h5py',
         'scipy',
@@ -20,7 +19,8 @@ setup(
         'PyQtGraph',
         'pyyaml',
         'matplotlib',
-        'npTDMS'],
+        'npTDMS',
+        'nibabel'],
     include_package_data=True,
     zip_safe=False,
 )
