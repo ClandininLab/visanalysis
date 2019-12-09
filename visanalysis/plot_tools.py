@@ -166,9 +166,15 @@ def overlayImage(im, mask, alpha, colors=None, z=0):
 
     overlayComponent = 0
     origImageComponent = 0
-    compositeMask = np.tile(mask[0][:, :, z, np.newaxis], 3)
+    if len(mask[0].shape) == 2:
+        compositeMask = np.tile(mask[0][..., np.newaxis], 3)
+    else:
+        compositeMask = np.tile(mask[0][:, :, z, np.newaxis], 3)
     for ind, currentRoi in enumerate(mask):
-        maskRGB = np.tile(currentRoi[:, :, z, np.newaxis], 3)
+        if len(mask[0].shape) == 2:
+            maskRGB = np.tile(currentRoi[..., np.newaxis], 3)
+        else:
+            maskRGB = np.tile(currentRoi[:, :, z, np.newaxis], 3)
         if colors is None:
             newColor = (1, 1, 1)
         else:

@@ -17,6 +17,7 @@ in the plugin subclass to overwrite these placeholders
 class BasePlugin():
     def __init__(self):
         super().__init__()
+        self.volume_analysis = False
 
     ###########################################################################
     # Core methods - must these in child plugin definition
