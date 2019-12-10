@@ -36,11 +36,12 @@ class BrukerPlugin(plugin.base.BasePlugin):
             self.current_series = self.loadImageSeries(kwargs.get('experiment_file_name'),
                                                        kwargs.get('data_directory'),
                                                        kwargs.get('series_number'))
+
         if self.current_series is None:  # No image file found
             roi_image = None
         else:
             if self.volume_analysis:  # xyzt data
-                roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis = 2)
+                roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis=2)
             else:  # txy data
                 roi_image = np.mean(self.current_series, axis=0)  # avg across time
         return roi_image
@@ -154,7 +155,8 @@ class BrukerPlugin(plugin.base.BasePlugin):
             print('Loaded xyt image series {}'.format(tif_file_path))
 
         elif os.path.isfile(nii_file_path):
-            image_series = nib.load(nii_file_path).get_fdata()  # xyzt
+            channel_index = 1  # nii data is xyztc, select only green channel
+            image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :, channel_index])  # xyzt
             self.volume_analysis = True
             print('Loaded xyzt image series {}'.format(nii_file_path))
 
