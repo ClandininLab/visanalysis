@@ -32,12 +32,8 @@ class ImagingDataObject():
         self.getPhotodiodeData()
         # Retrieve: response_timing
         self.getResponseTiming()
-
         # Calculate stimulus_timing
         self.computeEpochAndFrameTiming(plot_trace_flag=False)
-
-        # Get roi responses and calculate epoch response matrix for each
-        self.getRoiResponses()
 
         self.colors = sns.color_palette("deep", n_colors=20)
 
@@ -153,7 +149,7 @@ class ImagingDataObject():
                                 'dropped_frame_inds': dropped_frame_inds,
                                 'frame_rate': frame_rate}
 
-    def getRoiResponses(self):
+    def getRoiResponses(self, background_subtraction=False):
         self.roi = {}
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=self.series_number)
@@ -164,14 +160,29 @@ class ImagingDataObject():
                 new_roi['roi_response'] = list(roi_set_group.get("roi_response")[:])
                 new_roi['roi_mask'] = list(roi_set_group.get("roi_mask")[:])
                 new_roi['roi_image'] = roi_set_group.get("roi_image")[:]
-
-                # get epoch response matrix
-                time_vector, response_matrix = self.getEpochResponseMatrix(new_roi['roi_response'])
-
-                new_roi['epoch_response'] = response_matrix
-                new_roi['time_vector'] = time_vector
-
                 self.roi[roi_set_name] = new_roi
+
+        if background_subtraction: # TODO: make this a function for different bgs computations, maybe subclass out
+            # do background subtraction for each roi
+            response_rois = [x for x in self.roi.keys() if 'bg' not in x]
+            bg_all = self.roi.get('bg', None)
+            for roi_set_name in response_rois:
+                print(roi_set_name)
+                if bg_all:
+                    background = np.mean(self.roi.get('bg')['roi_response'], axis=0)
+                else:
+                    background = np.mean(self.roi.get(roi_set_name + '_bg')['roi_response'], axis=0)
+
+                self.roi.get(roi_set_name)['roi_response'] = self.roi.get(roi_set_name)['roi_response'] - background
+        else:
+            response_rois = self.roi.keys()
+
+        # get epoch response matrix for each roi
+        for roi_set_name in response_rois:
+            time_vector, response_matrix = self.getEpochResponseMatrix(self.roi.get(roi_set_name)['roi_response'])
+
+            self.roi.get(roi_set_name)['epoch_response'] = response_matrix
+            self.roi.get(roi_set_name)['time_vector'] = time_vector
 
     def getEpochResponseMatrix(self, roi_response):
         """
@@ -191,7 +202,7 @@ class ImagingDataObject():
         pre_time = self.run_parameters['pre_time']  # sec
         tail_time = self.run_parameters['tail_time']  # sec
         epoch_start_times = stimulus_start_times - pre_time
-        epoch_end_times = stimulus_end_times +  tail_time
+        epoch_end_times = stimulus_end_times + tail_time
 
         sample_period = self.response_timing['sample_period']  # sec
         stack_times = self.response_timing['time_vector']  # sec

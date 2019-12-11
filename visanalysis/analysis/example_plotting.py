@@ -7,7 +7,8 @@ series_number = 2
 
 ID = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
 # %%
-ID.roi.keys()
+ID.getRoiResponses(background_subtraction=True)
+
 # %%
 roi_name = 'roi_set_name'
 shared_analysis.plotResponseByCondition(ID, roi_name=roi_name, condition='component_stim_type')
