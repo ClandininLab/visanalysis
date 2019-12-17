@@ -3,7 +3,9 @@ import numpy as np
 from registration import CrossCorr
 import functools
 from visanalysis import plugin
+from visanalysis.analysis import imaging_data
 from matplotlib import path
+
 
 """
 Parent acquisition plugin class
@@ -18,6 +20,7 @@ class BasePlugin():
     def __init__(self):
         super().__init__()
         self.volume_analysis = False
+        self.ImagingDataObject = None
 
     ###########################################################################
     # Core methods - must these in child plugin definition
@@ -188,6 +191,14 @@ class BasePlugin():
                         roi_path.append(subpaths)  # list of list of paths
 
         return roi_response, roi_image, roi_path, roi_mask
+
+    def updateImagingDataObject(self, experiment_file_directory, experiment_file_name, series_number):
+        self.ImagingDataObject = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
+
+    def getTrialAverageRoiResponse(self, roi_response):
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response)
+        trial_avg = np.mean(response_matrix, axis=(0,1))
+        return trial_avg
 
 ##############################################################################
 # Functions for data file manipulation / access

@@ -163,6 +163,12 @@ class DataGUI(QWidget):
         self.clearROIsButton.clicked.connect(self.clearRois)
         self.roi_control_grid.addWidget(self.clearROIsButton, 0, 2)
 
+        # Response display type dropdown
+        self.RoiResponseTypeComboBox = QComboBox(self)
+        self.RoiResponseTypeComboBox.addItem("Raw trace")
+        self.RoiResponseTypeComboBox.addItem("Trial-average")
+        self.roi_control_grid.addWidget(self.RoiResponseTypeComboBox, 1, 2)
+
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
         self.le_roiSetName = QLineEdit(self.defaultRoiSetName)
@@ -257,6 +263,7 @@ class DataGUI(QWidget):
         self.series_number = None
         if 'series_' in group_path:
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
+            self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # print('selected series {}'.format(self.series_number))
 
         if item.parent() is not None:
@@ -285,7 +292,7 @@ class DataGUI(QWidget):
                           'pmt': 1,
                           'z_slice': self.current_z_slice}
                 self.roi_image = self.plugin.getRoiImage(**kwargs)
-                if self.roi_image is not None:
+                if len(self.roi_image) > 0:
                     if self.plugin.volume_analysis:
                         self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
                     else:
@@ -505,7 +512,12 @@ class DataGUI(QWidget):
     def redrawRoiTraces(self):
         self.responsePlot.clear()
         if self.current_roi_index < len(self.roi_response):
-            self.responsePlot.plot(np.squeeze(self.roi_response[self.current_roi_index].T), color=self.colors[self.current_roi_index], linewidth=1)
+            current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
+            if self.RoiResponseTypeComboBox.currentText() == 'Raw trace':
+                display_trace = current_raw_trace
+            elif self.RoiResponseTypeComboBox.currentText() == 'Trial-average':
+                display_trace = self.plugin.getTrialAverageRoiResponse([current_raw_trace])
+            self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1)
         self.responseCanvas.draw()
 
         self.refreshLassoWidget()

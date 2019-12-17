@@ -38,7 +38,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                                                        kwargs.get('series_number'))
 
         if self.current_series is None:  # No image file found
-            roi_image = None
+            roi_image = []
         else:
             if self.volume_analysis:  # xyzt data
                 roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis=2)

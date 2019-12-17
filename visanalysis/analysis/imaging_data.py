@@ -188,6 +188,7 @@ class ImagingDataObject():
         """
         getEpochReponseMatrix(self)
             Takes in long stack response traces and splits them up into each stimulus epoch
+            roi_response shape = list of roi responses
 
         Returns:
             time_vector (ndarray): in seconds. Time points of each frame acquisition within each epoch
@@ -199,6 +200,7 @@ class ImagingDataObject():
 
         stimulus_start_times = self.stimulus_timing['stimulus_start_times']  # sec
         stimulus_end_times = self.stimulus_timing['stimulus_end_times']  # sec
+
         pre_time = self.run_parameters['pre_time']  # sec
         tail_time = self.run_parameters['tail_time']  # sec
         epoch_start_times = stimulus_start_times - pre_time
@@ -214,7 +216,7 @@ class ImagingDataObject():
         # find how many acquisition frames correspond to pre, stim, tail time
         epoch_frames = int(epoch_time / sample_period)  # in acquisition frames
         pre_frames = int(pre_time / sample_period)  # in acquisition frames
-        time_vector = np.arange(0, epoch_frames) * sample_period # sec
+        time_vector = np.arange(0, epoch_frames) * sample_period  # sec
 
         no_trials = len(epoch_start_times)
         no_rois = response_trace.shape[0]
@@ -241,11 +243,10 @@ class ImagingDataObject():
             baseline = np.mean(new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True)
             # to dF/F
             new_resp_chunk = (new_resp_chunk - baseline) / baseline;
-            response_matrix[:, idx, :] = new_resp_chunk[:,0:epoch_frames]
+            response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
 
         if len(cut_inds) > 0:
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
-            print('aaaaaaa')
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)
         return time_vector, response_matrix
 
