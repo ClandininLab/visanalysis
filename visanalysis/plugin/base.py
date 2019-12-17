@@ -195,10 +195,25 @@ class BasePlugin():
     def updateImagingDataObject(self, experiment_file_directory, experiment_file_name, series_number):
         self.ImagingDataObject = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
 
-    def getTrialAverageRoiResponse(self, roi_response):
-        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response)
-        trial_avg = np.mean(response_matrix, axis=(0,1))
+    # roi display computation functions
+
+    def getRoiResponse_TrialAverage(self, roi_response):
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
+        trial_avg = np.mean(response_matrix, axis=(0, 1))
         return trial_avg
+
+    def getRoiResponse_TrialAverageDFF(self, roi_response):
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=True)
+        trial_avg = np.mean(response_matrix, axis=(0, 1))
+        return trial_avg
+
+    def getRoiResponse_RawTrace(self, roi_response):
+        return roi_response[0]
+
+    def getRoiResponse_TrialResponses(self, roi_response):
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
+        TrialResponses = np.mean(response_matrix, axis=0).T
+        return TrialResponses
 
 ##############################################################################
 # Functions for data file manipulation / access

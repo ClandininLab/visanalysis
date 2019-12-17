@@ -165,8 +165,11 @@ class DataGUI(QWidget):
 
         # Response display type dropdown
         self.RoiResponseTypeComboBox = QComboBox(self)
-        self.RoiResponseTypeComboBox.addItem("Raw trace")
-        self.RoiResponseTypeComboBox.addItem("Trial-average")
+
+        self.RoiResponseTypeComboBox.addItem("RawTrace")
+        self.RoiResponseTypeComboBox.addItem("TrialAverage")
+        self.RoiResponseTypeComboBox.addItem("TrialResponses")
+        self.RoiResponseTypeComboBox.addItem("TrialAverageDFF")
         self.roi_control_grid.addWidget(self.RoiResponseTypeComboBox, 1, 2)
 
         # ROIset file name line edit box
@@ -513,11 +516,9 @@ class DataGUI(QWidget):
         self.responsePlot.clear()
         if self.current_roi_index < len(self.roi_response):
             current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
-            if self.RoiResponseTypeComboBox.currentText() == 'Raw trace':
-                display_trace = current_raw_trace
-            elif self.RoiResponseTypeComboBox.currentText() == 'Trial-average':
-                display_trace = self.plugin.getTrialAverageRoiResponse([current_raw_trace])
-            self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1)
+            fxn_name = self.RoiResponseTypeComboBox.currentText()
+            display_trace = getattr(self.plugin, 'getRoiResponse_{}'.format(fxn_name))([current_raw_trace])
+            self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
         self.responseCanvas.draw()
 
         self.refreshLassoWidget()

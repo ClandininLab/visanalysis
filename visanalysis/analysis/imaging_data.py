@@ -184,7 +184,7 @@ class ImagingDataObject():
             self.roi.get(roi_set_name)['epoch_response'] = response_matrix
             self.roi.get(roi_set_name)['time_vector'] = time_vector
 
-    def getEpochResponseMatrix(self, roi_response):
+    def getEpochResponseMatrix(self, roi_response, dff=True):
         """
         getEpochReponseMatrix(self)
             Takes in long stack response traces and splits them up into each stimulus epoch
@@ -239,10 +239,12 @@ class ImagingDataObject():
             # pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
             new_resp_chunk = response_trace[:, stack_inds]
 
-            # calculate baseline using pre frames
-            baseline = np.mean(new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True)
-            # to dF/F
-            new_resp_chunk = (new_resp_chunk - baseline) / baseline;
+            if dff:
+                # calculate baseline using pre frames
+                baseline = np.mean(new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True)
+                # to dF/F
+                new_resp_chunk = (new_resp_chunk - baseline) / baseline
+
             response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
 
         if len(cut_inds) > 0:
