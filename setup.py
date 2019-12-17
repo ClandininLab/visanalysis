@@ -16,7 +16,6 @@ setup(
         'scikit-image',
         'thunder-registration',
         'seaborn',
-        'PyQtGraph',
         'pyyaml',
         'matplotlib',
         'npTDMS',

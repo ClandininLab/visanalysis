@@ -6,13 +6,13 @@ Created on Thu Jun 21 10:51:42 2018
 @author: mhturner
 """
 import sys
-from pyqtgraph.widgets.PlotWidget import PlotWidget
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import path
 import seaborn as sns
-from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
 from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
-import pyqtgraph as pg
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider,
@@ -185,18 +185,23 @@ class DataGUI(QWidget):
         self.roiSlider.valueChanged.connect(self.sliderUpdated)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 2)
 
-        self.responsePlot = PlotWidget()
-        self.plot_grid.addWidget(self.responsePlot, 0, 0)
+        plt.rc_context({'axes.edgecolor':'white', 'xtick.color':'white', 'ytick.color':'white', 'figure.facecolor':'black', 'axes.facecolor':'black'})
+        self.responseFig = plt.figure()
+        self.responsePlot = self.responseFig.add_subplot(111)
+        self.responseFig.subplots_adjust(left=0.05, bottom=0.20, top=0.95, right=0.98)
+        self.responseCanvas = FigureCanvas(self.responseFig)
+        self.responseCanvas.draw_idle()
+        self.plot_grid.addWidget(self.responseCanvas, 0, 0)
 
         # # # # Image canvas # # # # # # # # (1, 2)
-        self.roi_canvas = MatplotlibWidget()
-        toolbar = self.roi_canvas.findChild(QToolBar)
-        toolbar.setVisible(True)
-        self.roi_fig = self.roi_canvas.getFigure()
-        self.roi_ax = self.roi_fig.add_subplot(1, 1, 1)
+        self.roi_fig = plt.figure()
+        self.roi_ax = self.roi_fig.add_subplot(111)
+        self.roi_canvas = FigureCanvas(self.roi_fig)
+        self.toolbar = NavigationToolbar(self.roi_canvas, self)
         self.roi_ax.set_aspect('equal')
         self.roi_ax.set_axis_off()
-        self.plot_grid.addWidget(self.roi_canvas, 1, 0)
+        self.plot_grid.addWidget(self.toolbar, 1, 0)
+        self.plot_grid.addWidget(self.roi_canvas, 2, 0)
         self.plot_grid.setRowStretch(0, 1)
         self.plot_grid.setRowStretch(1, 3)
         self.plot_grid.setRowStretch(2, 3)
@@ -207,7 +212,7 @@ class DataGUI(QWidget):
         self.zSlider.setMaximum(50)
         self.zSlider.setValue(0)
         self.zSlider.valueChanged.connect(self.zSliderUpdated)
-        self.plot_grid.addWidget(self.zSlider, 2, 0)
+        self.plot_grid.addWidget(self.zSlider, 3, 0)
 
         self.roi_fig.tight_layout()
 
@@ -500,8 +505,8 @@ class DataGUI(QWidget):
     def redrawRoiTraces(self):
         self.responsePlot.clear()
         if self.current_roi_index < len(self.roi_response):
-            penStyle = pg.mkPen(color = tuple([255*x for x in self.colors[self.current_roi_index]]))
-            self.responsePlot.plot(np.squeeze(self.roi_response[self.current_roi_index].T), pen=penStyle)
+            self.responsePlot.plot(np.squeeze(self.roi_response[self.current_roi_index].T), color=self.colors[self.current_roi_index], linewidth=1)
+        self.responseCanvas.draw()
 
         self.refreshLassoWidget()
 
