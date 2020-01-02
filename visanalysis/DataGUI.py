@@ -34,18 +34,20 @@ class DataGUI(QWidget):
         self.experiment_file_name = None
         self.experiment_file_directory = None
         self.data_directory = None
-        self.max_rois = 12
+        self.max_rois = 50
         self.roi_type = 'freehand'
         self.roi_radius = None
+        self.existing_roi_set_paths = {}
 
         self.current_roi_index = 0
+        self.current_z_slice = 0
+        self.series_number = None
         self.roi_response = []
         self.roi_mask = []
         self.roi_path = []
         self.roi_image = []
         self.roi_path_list = []
         self.roi_z_list =[]
-        self.current_z_slice = 0
 
         self.blank_image = np.zeros((1,1))
 
@@ -170,7 +172,7 @@ class DataGUI(QWidget):
         self.RoiResponseTypeComboBox.addItem("TrialAverage")
         self.RoiResponseTypeComboBox.addItem("TrialResponses")
         self.RoiResponseTypeComboBox.addItem("TrialAverageDFF")
-        self.roi_control_grid.addWidget(self.RoiResponseTypeComboBox, 1, 2)
+        self.roi_control_grid.addWidget(self.RoiResponseTypeComboBox, 2, 2)
 
         # ROIset file name line edit box
         self.defaultRoiSetName = "roi_set_name"
@@ -182,6 +184,13 @@ class DataGUI(QWidget):
         self.saveROIsButton.clicked.connect(self.saveRois)
         self.roi_control_grid.addWidget(self.saveROIsButton, 1, 0)
 
+        # Load ROI set combobox
+        self.loadROIsComboBox = QComboBox(self)
+        self.loadROIsComboBox.addItem("(load existing ROI set)")
+        self.loadROIsComboBox.activated.connect(self.selectedExistingRoiSet)
+        self.roi_control_grid.addWidget(self.loadROIsComboBox, 1, 2)
+        self.updateExistingRoiSetList()
+
         # Delete current roi button
         self.deleteROIButton = QPushButton("Delete ROI", self)
         self.deleteROIButton.clicked.connect(self.deleteRoi)
@@ -192,7 +201,7 @@ class DataGUI(QWidget):
         self.roiSlider.setMinimum(0)
         self.roiSlider.setMaximum(self.max_rois)
         self.roiSlider.valueChanged.connect(self.sliderUpdated)
-        self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 2)
+        self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 1)
 
         plt.rc_context({'axes.edgecolor':'white', 'xtick.color':'white', 'ytick.color':'white', 'figure.facecolor':'black', 'axes.facecolor':'black'})
         self.responseFig = plt.figure()
@@ -266,7 +275,9 @@ class DataGUI(QWidget):
         self.series_number = None
         if 'series_' in group_path:
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
-            self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
+            if self.plugin.dataIsAttached(file_path, self.series_number):
+                if not self.plugin.volume_analysis:
+                    self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # print('selected series {}'.format(self.series_number))
 
         if item.parent() is not None:
@@ -274,7 +285,8 @@ class DataGUI(QWidget):
                 roi_set_name = item.text(column)
                 # print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
                 self.le_roiSetName.setText(roi_set_name)
-                self.loadRois()
+                roi_set_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+                self.loadRois(roi_set_path)
                 self.redrawRoiTraces()
 
         if group_path != '':
@@ -305,6 +317,41 @@ class DataGUI(QWidget):
             else:
                 print('Select a data directory before drawing rois')
 
+    def updateExistingRoiSetList(self):
+        if self.experiment_file_name is not None:
+            file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+            self.existing_roi_set_paths = self.plugin.getRoiSetPaths(file_path)  # dictionary of name: full path
+            self.loadROIsComboBox.clear()
+            for r_path in self.existing_roi_set_paths:
+                self.loadROIsComboBox.addItem(r_path)
+
+            self.show()
+
+    def selectedExistingRoiSet(self):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        roi_set_key = self.loadROIsComboBox.currentText()
+        roi_set_path = self.existing_roi_set_paths[roi_set_key]
+
+        self.roi_path, self.roi_mask = self.plugin.loadRoiGeometry(file_path, roi_set_path)
+
+        if self.series_number is not None:
+            self.roi_response = []
+            for path in self.roi_path:
+                new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=path,
+                                                              data_directory=self.data_directory,
+                                                              series_number=self.series_number,
+                                                              experiment_file_name=self.experiment_file_name,
+                                                              experiment_file_path=file_path)
+                self.roi_response.append(new_roi_resp)
+
+            # update slider to show most recently drawn roi response
+            self.current_roi_index = len(self.roi_response)-1
+            self.roiSlider.setValue(self.current_roi_index)
+
+            # Update figures
+            self.redrawRoiTraces()
+
+
     def selectDataFile(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Open file")
         self.experiment_file_name = os.path.split(filePath)[1].split('.')[0]
@@ -314,6 +361,7 @@ class DataGUI(QWidget):
             self.currentExperimentLabel.setText(self.experiment_file_name)
             self.initializeDataAnalysis()
             self.populateGroups()
+            self.updateExistingRoiSetList()
 
     def selectDataDirectory(self):
         filePath = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
@@ -361,9 +409,11 @@ class DataGUI(QWidget):
             plugin.base.deleteGroup(file_path=file_path,
                                     group_path=group_path)
             print('Deleted group {}'.format(group_name))
+            self.updateExistingRoiSetList()
             self.populateGroups()
         else:
             print('Delete aborted')
+
 
     def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -437,19 +487,21 @@ class DataGUI(QWidget):
 
     def newFreehand(self, verts):
         new_roi_path = path.Path(verts)
-        self.updateRoiSelection([new_roi_path], [self.zSlider.value()])
+        new_roi_path.z_level = self.zSlider.value()
+        self.updateRoiSelection([new_roi_path])
 
     def appendFreehand(self, verts):
         print('Appending rois, hit Enter/Return to finish')
-        self.roi_path_list.append(path.Path(verts))
-        self.roi_z_list.append(self.zSlider.value())
+        new_roi_path = path.Path(verts)
+        new_roi_path.z_level = self.zSlider.value()
+        self.roi_path_list.append(new_roi_path)
 
     def keyPressEvent(self, event):
         if type(event) == QtGui.QKeyEvent:
             if np.any([event.key() == QtCore.Qt.Key_Return, event.key() == QtCore.Qt.Key_Enter]):
                 if len(self.roi_path_list) > 0:
                     event.accept()
-                    self.updateRoiSelection(self.roi_path_list, self.roi_z_list)
+                    self.updateRoiSelection(self.roi_path_list)
                 else:
                     event.ignore()
             else:
@@ -469,25 +521,25 @@ class DataGUI(QWidget):
             radiusX = self.roi_radius
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
-        self.new_roi_path = path.Path.circle(center = center, radius = radiusX)
-        self.updateRoiSelection([self.new_roi_path], [self.zSlider.value()])
+        new_roi_path = path.Path.circle(center = center, radius = radiusX)
+        new_roi_path.z_level = self.zSlider.value()
+        self.updateRoiSelection([new_roi_path])
 
-    def updateRoiSelection(self, new_roi_path, z_slices):
+    def updateRoiSelection(self, new_roi_path):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        mask = self.plugin.getRoiMaskFromPath(new_roi_path, z_slices, self.data_directory, self.series_number, self.experiment_file_name, file_path)
-        self.new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
-                                                           z_slices=z_slices,
-                                                           data_directory=self.data_directory,
-                                                           series_number=self.series_number,
-                                                           experiment_file_name=self.experiment_file_name,
-                                                           experiment_file_path=file_path)
-        if self.new_roi_resp is None:
+        mask = self.plugin.getRoiMaskFromPath(new_roi_path, self.data_directory, self.series_number, self.experiment_file_name, file_path)
+        new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
+                                                      data_directory=self.data_directory,
+                                                      series_number=self.series_number,
+                                                      experiment_file_name=self.experiment_file_name,
+                                                      experiment_file_path=file_path)
+        if new_roi_resp is None:
             print('No pixels in selected roi')
             return
         # update list of roi data
         self.roi_mask.append(mask)
         self.roi_path.append(new_roi_path)  # list of lists of paths
-        self.roi_response.append(self.new_roi_resp)
+        self.roi_response.append(new_roi_resp)
         # update slider to show most recently drawn roi response
         self.current_roi_index = len(self.roi_response)-1
         self.roiSlider.setValue(self.current_roi_index)
@@ -501,7 +553,6 @@ class DataGUI(QWidget):
 
     def zSliderUpdated(self):
         self.current_z_slice = self.zSlider.value()
-        self.plugin.z_slice = self.current_z_slice
         kwargs = {'data_directory': self.data_directory,
                   'series_number': self.series_number,
                   'experiment_file_name': self.experiment_file_name,
@@ -525,9 +576,8 @@ class DataGUI(QWidget):
 
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
 
-    def loadRois(self):
+    def loadRois(self, roi_set_path):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        roi_set_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.roi_response, self.roi_image, self.roi_path, self.roi_mask = self.plugin.loadRoiSet(file_path, roi_set_path)
 
     def saveRois(self):
@@ -548,6 +598,7 @@ class DataGUI(QWidget):
                                roi_path=self.roi_path)
                 print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
                 self.populateGroups()
+                self.updateExistingRoiSetList()
             else:
                 print('Overwrite aborted - pick a unique roi set name')
         else:
@@ -560,6 +611,7 @@ class DataGUI(QWidget):
                            roi_path=self.roi_path)
             print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
             self.populateGroups()
+            self.updateExistingRoiSetList()
 
     def deleteRoi(self):
         if self.current_roi_index < len(self.roi_response):

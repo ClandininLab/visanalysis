@@ -108,6 +108,17 @@ class BasePlugin():
         series = [int(x.split('_')[-1]) for x in all_series]
         return series
 
+    def getRoiSetPaths(self, file_path):
+        all_roiset_paths = {}
+        with h5py.File(file_path, 'r') as experiment_file:
+            for fly_id in list(experiment_file['/Flies'].keys()):
+                for sn in list(experiment_file['/Flies/{}/epoch_runs'.format(fly_id)].keys()):
+                    for roi_name in experiment_file['/Flies/{}/epoch_runs/{}/rois'.format(fly_id, sn)].keys():
+                        new_path = '/Flies/{}/epoch_runs/{}/rois/{}'.format(fly_id, sn, roi_name)
+                        new_key = '{}:{}:{}'.format(fly_id, sn, roi_name)
+                        all_roiset_paths[new_key] = new_path
+        return all_roiset_paths
+
     def registerStack(self, image_series, time_points):
         """
         """
@@ -115,20 +126,19 @@ class BasePlugin():
         reference_time_frame = 1  # sec, first frames to use as reference for registration
         reference_frame = np.where(time_points > reference_time_frame)[0][0]
 
-        reference_image = np.squeeze(np.mean(image_series[0:reference_frame,:,:], axis = 0))
+        reference_image = np.squeeze(np.mean(image_series[0:reference_frame, :, :], axis=0))
         register = CrossCorr()
         model = register.fit(image_series, reference=reference_image)
 
         registered_series = model.transform(image_series)
         if len(registered_series.shape) == 3:  # xyt
-            registered_series = registered_series.toseries().toarray().transpose(2,0,1)  # shape t, y, x
+            registered_series = registered_series.toseries().toarray().transpose(2, 0, 1)  # shape t, y, x
         elif len(registered_series.shape) == 4:  # xyzt
-            registered_series = registered_series.toseries().toarray().transpose(3,0,1,2)  # shape t, z, y, x
+            registered_series = registered_series.toseries().toarray().transpose(3, 0, 1, 2)  # shape t, z, y, x
 
         return registered_series
 
     # ROI METHODS:
-
     def saveRoiSet(self, file_path, series_number,
                    roi_set_name,
                    roi_mask,
@@ -155,6 +165,33 @@ class BasePlugin():
                 for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
                     current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
                     plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
+                    current_roi_path_group.attrs['z_level'] = p.z_level
+
+    def loadRoiGeometry(self, file_path, roi_set_path):
+        def find_roi_path(name, obj):
+            if 'roipath' in name:
+                return obj
+
+        def find_roi_subpath(name, obj):
+            if 'subpath' in name:
+                return obj
+
+        with h5py.File(file_path, 'r') as experiment_file:
+            roi_set_group = experiment_file[roi_set_path]
+            roi_mask = list(roi_set_group.get("roi_mask")[:])
+
+            roi_path = []
+            for roipath_key, roipath_group in roi_set_group.items():
+                if isinstance(roipath_group, h5py._hl.group.Group):
+                    subpaths = []
+                    for roi_subpath_group in roipath_group.values():
+                        if isinstance(roi_subpath_group, h5py._hl.group.Group):
+                            new_path = path.Path(roi_subpath_group.get("path_vertices")[:])
+                            new_path.z_level = roi_subpath_group.attrs.get('z_level', 0)
+                            subpaths.append(new_path)
+                    roi_path.append(subpaths)  # list of list of paths
+
+        return roi_path, roi_mask
 
     def loadRoiSet(self, file_path, roi_set_path):
         def find_roi_path(name, obj):
@@ -165,30 +202,21 @@ class BasePlugin():
             if 'subpath' in name:
                 return obj
 
-        roi_set_name = roi_set_path.split('/')[-1]
         with h5py.File(file_path, 'r') as experiment_file:
-            if 'series' in roi_set_name:  # roi set from a different series
-                series_no = roi_set_name.split(':')[0].split('series')[1]
-                roi_name = roi_set_name.split(':')[1]
-                #TODO: FIXME
-                roi_set_group = experiment_file['/epoch_runs'].get(series_no).get('rois').get(roi_name)
-                roi_response = [getRoiDataFromMask(x) for x in roi_mask]
+            roi_set_group = experiment_file[roi_set_path]
+            roi_response = list(roi_set_group.get("roi_response")[:])
+            roi_mask = list(roi_set_group.get("roi_mask")[:])
+            roi_image = roi_set_group.get("roi_image")[:]
 
-            else:  # from this series
-                roi_set_group = experiment_file[roi_set_path]
-                roi_response = list(roi_set_group.get("roi_response")[:])
-                roi_mask = list(roi_set_group.get("roi_mask")[:])
-                roi_image = roi_set_group.get("roi_image")[:]
-
-                roi_path = []
-                for roipath_key, roipath_group in roi_set_group.items():
-                    if isinstance(roipath_group, h5py._hl.group.Group):
-                        subpaths = []
-                        for roi_subpath_group in roipath_group.values():
-                            if isinstance(roi_subpath_group, h5py._hl.group.Group):
-                                subpaths.append(roi_subpath_group.get("path_vertices")[:])
-                        subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
-                        roi_path.append(subpaths)  # list of list of paths
+            roi_path = []
+            for roipath_key, roipath_group in roi_set_group.items():
+                if isinstance(roipath_group, h5py._hl.group.Group):
+                    subpaths = []
+                    for roi_subpath_group in roipath_group.values():
+                        if isinstance(roi_subpath_group, h5py._hl.group.Group):
+                            subpaths.append(roi_subpath_group.get("path_vertices")[:])
+                    subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
+                    roi_path.append(subpaths)  # list of list of paths
 
         return roi_response, roi_image, roi_path, roi_mask
 
@@ -214,6 +242,17 @@ class BasePlugin():
         time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
         TrialResponses = np.mean(response_matrix, axis=0).T
         return TrialResponses
+
+    def dataIsAttached(self, file_path, series_number):
+        with h5py.File(file_path, 'r+') as experiment_file:
+            find_partial = functools.partial(find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            acquisition_group = epoch_run_group.get('acquisition')
+            if len(acquisition_group.keys()) > 0:
+                return True
+            else:
+                return False
+
 
 ##############################################################################
 # Functions for data file manipulation / access

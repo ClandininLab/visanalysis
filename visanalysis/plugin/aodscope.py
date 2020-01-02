@@ -75,7 +75,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return roi_image
 
-    def getRoiMaskFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         with h5py.File(experiment_file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
@@ -132,7 +132,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return mask
 
-    def getRoiDataFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         with h5py.File(experiment_file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=series_number)
             epoch_run_group = experiment_file.visititems(find_partial)

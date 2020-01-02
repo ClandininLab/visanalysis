@@ -28,7 +28,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
         self.current_series = None
         self.current_series_number = 0
         self.volume_analysis = False
-        self.z_slice = 0
 
     def getRoiImage(self, **kwargs):
         if kwargs.get('series_number') != self.current_series_number:
@@ -46,21 +45,20 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 roi_image = np.mean(self.current_series, axis=0)  # avg across time
         return roi_image
 
-    def getRoiDataFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
             self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
 
-        mask = self.getRoiMaskFromPath(roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path)
+        mask = self.getRoiMaskFromPath(roi_path, data_directory, series_number, experiment_file_name, experiment_file_path)
 
         roi_response = np.mean(self.current_series[mask, :], axis=0, keepdims=True) - np.min(self.current_series)
 
         return roi_response
 
-    def getRoiMaskFromPath(self, roi_path, z_slices, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
         """
         roi_path is list of path objects
-        z_slices is a list of associated z slice numbers
 
         """
         x_dim, y_dim, z_dim, t_dim = self.current_series.shape
@@ -72,9 +70,10 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
         mask = np.zeros(shape=(x_dim, y_dim, z_dim))
 
-        for z_ind, z in enumerate(z_slices):
-            xy_indices = np.reshape(roi_path[z_ind].contains_points(roi_pix, radius=0.5), (x_dim, y_dim))
-            mask[xy_indices, z] = 1
+        for path in roi_path:
+            z_level = path.z_level
+            xy_indices = np.reshape(path.contains_points(roi_pix, radius=0.5), (x_dim, y_dim))
+            mask[xy_indices, z_level] = 1
 
         mask = mask == 1  # convert to boolean for masking
 
