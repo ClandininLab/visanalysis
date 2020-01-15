@@ -148,8 +148,8 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
                         series_metadata[s_key] = data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).attrs[s_key]
 
                     new_series = {**fly_metadata, **series_metadata}
-                    new_series['series'] = epoch_run
-                    new_series['file_name'] = fn
+                    new_series['series'] = int(epoch_run.split('_')[1])
+                    new_series['file_name'] = fn.split('\\')[-1].split('.')[0]
                     all_series.append(new_series)
 
     # search in all series for target key/value pairs
