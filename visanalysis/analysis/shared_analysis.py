@@ -129,22 +129,22 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
         -target_series_metadata: (dict) key-value pairs of target parameters to search for in the series run (run parameters)
 
     Returns
-        List of tuples (filepath, series number) matching the desired target params
+        -matching_series: List of matching series dicts with all fly & run params as well as file name and series number
     """
     fileNames = glob.glob(data_directory + "*.hdf5")
 
-    # collect relevant key/value pairs for all series in data directory
+    # collect key/value pairs for all series in data directory
     all_series = []
     for ind, fn in enumerate(fileNames):
         with h5py.File(fn, 'r') as data_file:
             for fly in data_file.get('Flies'):
                 fly_metadata = {}
-                for f_key in target_fly_metadata:
+                for f_key in data_file.get('Flies').get(fly).attrs.keys():
                     fly_metadata[f_key] = data_file.get('Flies').get(fly).attrs[f_key]
 
                 for epoch_run in data_file.get('Flies').get(fly).get('epoch_runs'):
                     series_metadata = {}
-                    for s_key in target_series_metadata:
+                    for s_key in data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).attrs.keys():
                         series_metadata[s_key] = data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).attrs[s_key]
 
                     new_series = {**fly_metadata, **series_metadata}
@@ -153,10 +153,10 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
                     all_series.append(new_series)
 
     # search in all series for target key/value pairs
-    joint_dict = {**target_fly_metadata, **target_series_metadata}
-    target_series = []
+    match_dict = {**target_fly_metadata, **target_series_metadata}
+    matching_series = []
     for series in all_series:
-        if all([series[key] == joint_dict[key] for key in joint_dict]):
-            target_series.append((series['file_name'], series['series']))
+        if all([series[key] == match_dict[key] for key in match_dict]):
+            matching_series.append(series)
 
-    return target_series
+    return matching_series
