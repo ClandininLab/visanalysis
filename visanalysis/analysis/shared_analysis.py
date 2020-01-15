@@ -6,15 +6,19 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import glob
+import h5py
 
 from visanalysis import plot_tools
 
 
 def getTraceMatrixByStimulusParameter(response_matrix, parameter_values):
-    # parameter values is nTrials x nParams  numpy array
-    # returns:
-    #   uniqueParameterValues (nConditions x nParams)
-    #   meanTraceMatrix and semTraceMatrix (nRois x nConditions, time)
+    """
+    parameter values is nTrials x nParams  numpy array
+    returns:
+      uniqueParameterValues (nConditions x nParams)
+      meanTraceMatrix and semTraceMatrix (nRois x nConditions, time)
+    """
     unique_parameter_values = np.unique(parameter_values, axis=0)
 
     no_rois = response_matrix.shape[0]
@@ -113,3 +117,46 @@ def plotRoiResponses(ImagingData, roi_name, fig_handle = None):
             plot_tools.addScaleBars(new_ax, 1, 1, F_value = -0.1, T_value = -0.2)
 
     fig_handle.canvas.draw()
+
+def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metadata={}):
+    """
+    Searches through a directory of visprotocol datafiles and finds datafiles/series that match the search values
+    Can search based on any number of fly metadata params or run parameters
+
+    Params
+        -data_directory: directory of visprotocol data files to search through
+        -target_fly_metadata: (dict) key-value pairs of target parameters to search for in the fly metadata
+        -target_series_metadata: (dict) key-value pairs of target parameters to search for in the series run (run parameters)
+
+    Returns
+        List of tuples (filepath, series number) matching the desired target params
+    """
+    fileNames = glob.glob(data_directory + "*.hdf5")
+
+    # collect relevant key/value pairs for all series in data directory
+    all_series = []
+    for ind, fn in enumerate(fileNames):
+        with h5py.File(fn, 'r') as data_file:
+            for fly in data_file.get('Flies'):
+                fly_metadata = {}
+                for f_key in target_fly_metadata:
+                    fly_metadata[f_key] = data_file.get('Flies').get(fly).attrs[f_key]
+
+                for epoch_run in data_file.get('Flies').get(fly).get('epoch_runs'):
+                    series_metadata = {}
+                    for s_key in target_series_metadata:
+                        series_metadata[s_key] = data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).attrs[s_key]
+
+                    new_series = {**fly_metadata, **series_metadata}
+                    new_series['series'] = epoch_run
+                    new_series['file_name'] = fn
+                    all_series.append(new_series)
+
+    # search in all series for target key/value pairs
+    joint_dict = {**target_fly_metadata, **target_series_metadata}
+    target_series = []
+    for series in all_series:
+        if all([series[key] == joint_dict[key] for key in joint_dict]):
+            target_series.append((series['file_name'], series['series']))
+
+    return target_series
