@@ -8,7 +8,7 @@ series_number = 2
 ID = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
 # %%
 ID.getRoiResponses()
-ID.roi.get('roi_set_name')['roi_response'][0].shape
+ID.roi.get(roi_set_name)['roi_response'][0].shape
 
 # %%
 ID.getRoiResponses(background_subtraction=True)

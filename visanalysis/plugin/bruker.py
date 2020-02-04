@@ -39,10 +39,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         if self.current_series is None:  # No image file found
             roi_image = []
         else:
-            if self.volume_analysis:  # xyzt data
-                roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis=2)
-            else:  # txy data
-                roi_image = np.mean(self.current_series, axis=0)  # avg across time
+            roi_image = np.mean(np.squeeze(self.current_series[:, :, int(kwargs.get('z_slice')), :]), axis=2)
         return roi_image
 
     def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
@@ -149,7 +146,9 @@ class BrukerPlugin(plugin.base.BasePlugin):
         tif_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
         nii_file_path = os.path.join(data_directory, image_series_name) + '_reg.nii'
         if os.path.isfile(tif_file_path): # TODO fix me
-            image_series = np.expand_dims(np.swapaxes(io.imread(tif_file_path), 0, 2), axis=2)  # txy
+            # native axes order is tyx: convert to xyzt, with z dummy axis
+            image_series = io.imread(tif_file_path)
+            image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
             self.volume_analysis = False
             print('Loaded xyt image series {}'.format(tif_file_path))
 
