@@ -176,7 +176,7 @@ def overlayImage(im, mask, alpha, colors=None, z=0):
         else:
             maskRGB = np.tile(currentRoi[:, :, z, np.newaxis], 3)
         if colors is None:
-            newColor = (1, 1, 1)
+            newColor = (1, 0, 0)
         else:
             newColor = colors[ind]
 

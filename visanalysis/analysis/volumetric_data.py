@@ -1,6 +1,7 @@
 from visanalysis.analysis import imaging_data
 import numpy as np
 from scipy import stats
+import nibabel as nib
 
 
 class VolumetricDataObject(imaging_data.ImagingDataObject):
@@ -109,3 +110,15 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
             mean_brain_response[:, :, :, :, p_ind] = (np.mean(brain_trial_matrix[:, :, :, :, pull_inds], axis=4))
 
         return mean_brain_response, unique_parameter_values, p_values
+
+
+def loadFunctionalBrain(file_path, x_lim=[0, None], y_lim=[0, None], z_lim=[0, None], t_lim=[0, None], channel=1):
+    brain = nib.load(file_path).get_fdata()
+    if len(brain.shape) > 4:  # multi-channel xyztc
+        brain = brain[x_lim[0]:x_lim[1], y_lim[0]:y_lim[1], z_lim[0]:z_lim[1], t_lim[0]:t_lim[1], channel]
+        print('Loaded channel {} of xyztc brain {}'.format(channel, file_path))
+    else:  # single channel xyzt
+        brain = brain[x_lim[0]:x_lim[1], y_lim[0]:y_lim[1], z_lim[0]:z_lim[1], t_lim[0]:t_lim[1]]
+        print('Loaded single channel xyzt brain {}'.format(file_path))
+
+    return brain
