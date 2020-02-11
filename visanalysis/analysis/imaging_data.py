@@ -18,7 +18,7 @@ from visanalysis import plot_tools
 
 class ImagingDataObject():
     def __init__(self, experiment_file_directory, experiment_file_name, series_number):
-        self.experiment_file_directory = experiment_file_directory
+        self.experiment_file_directory = os.path.expanduser(experiment_file_directory)
         self.experiment_file_name = experiment_file_name
         self.series_number = series_number
         self.file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
