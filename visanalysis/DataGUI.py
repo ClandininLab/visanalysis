@@ -357,7 +357,7 @@ class DataGUI(QWidget):
         self.experiment_file_name = os.path.split(filePath)[1].split('.')[0]
         self.experiment_file_directory = os.path.split(filePath)[0]
 
-        if self.experiment_file_name is not '':
+        if self.experiment_file_name != '':
             self.currentExperimentLabel.setText(self.experiment_file_name)
             self.initializeDataAnalysis()
             self.populateGroups()
