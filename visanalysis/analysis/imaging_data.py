@@ -17,7 +17,14 @@ from visanalysis import plot_tools
 
 
 class ImagingDataObject():
-    def __init__(self, experiment_file_directory, experiment_file_name, series_number):
+    def __init__(self, experiment_file_directory, experiment_file_name, series_number, kwargs=None):
+        kwargs_passed = {'plot_trace_flag': False,
+                         'minimum_epoch_separation': 2e3}
+
+        if kwargs is not None:
+            for key in kwargs:
+                kwargs_passed[key] = kwargs[key]
+
         self.experiment_file_directory = experiment_file_directory
         self.experiment_file_name = experiment_file_name
         self.series_number = series_number
@@ -33,7 +40,7 @@ class ImagingDataObject():
         # Retrieve: response_timing
         self.getResponseTiming()
         # Calculate stimulus_timing
-        self.computeEpochAndFrameTiming(plot_trace_flag=False)
+        self.computeEpochAndFrameTiming(plot_trace_flag=kwargs_passed['plot_trace_flag'], minimum_epoch_separation=kwargs_passed['minimum_epoch_separation'])
 
         self.colors = sns.color_palette("deep", n_colors=20)
 
@@ -133,7 +140,7 @@ class ImagingDataObject():
         frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
 
         if plot_trace_flag:
-            self.frame_monitor_figure = plt.figure()
+            self.frame_monitor_figure = plt.figure(figsize=(16, 6))
             ax = self.frame_monitor_figure.add_subplot(111)
             ax.plot(time_vector, frame_monitor)
             ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape),'ko')
