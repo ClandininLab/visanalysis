@@ -112,9 +112,9 @@ def loadFunctionalBrain(file_path, x_lim=[0, None], y_lim=[0, None], z_lim=[0, N
     brain = nib.load(file_path).get_fdata()
     if len(brain.shape) > 4:  # multi-channel xyztc
         brain = brain[x_lim[0]:x_lim[1], y_lim[0]:y_lim[1], z_lim[0]:z_lim[1], t_lim[0]:t_lim[1], channel]
-        print('Loaded channel {} of xyztc brain {}'.format(channel, file_path))
+        # print('Loaded channel {} of xyztc brain {}'.format(channel, file_path))
     else:  # single channel xyzt
         brain = brain[x_lim[0]:x_lim[1], y_lim[0]:y_lim[1], z_lim[0]:z_lim[1], t_lim[0]:t_lim[1]]
-        print('Loaded single channel xyzt brain {}'.format(file_path))
+        # print('Loaded single channel xyzt brain {}'.format(file_path))
 
     return brain
