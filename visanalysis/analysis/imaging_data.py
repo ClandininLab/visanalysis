@@ -35,6 +35,7 @@ class ImagingDataObject():
         self.getEpochParameters()
         # Retrieve:
         self.getFlyMetadata()
+        self.getAcquisitionMetadata()
         # Retrieve: photodiode_trace, photodiode_time_vector, photodiode_sample_rate
         self.getPhotodiodeData()
         # Retrieve: response_timing
@@ -42,7 +43,7 @@ class ImagingDataObject():
         # Calculate stimulus_timing
         self.computeEpochAndFrameTiming(plot_trace_flag=kwargs_passed['plot_trace_flag'], minimum_epoch_separation=kwargs_passed['minimum_epoch_separation'])
 
-        self.colors = sns.color_palette("deep", n_colors=20)
+        self.colors = sns.color_palette("Set2", n_colors=20)
 
     def getRunParameters(self):
         with h5py.File(self.file_path, 'r') as experiment_file:
@@ -71,6 +72,15 @@ class ImagingDataObject():
             self.fly_metadata = {}
             for attr_key in fly_group.attrs:
                 self.fly_metadata[attr_key] = fly_group.attrs[attr_key]
+
+    def getAcquisitionMetadata(self):
+        with h5py.File(self.file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=self.series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            acquisition_group = epoch_run_group['acquisition']
+            self.acquisition_metadata = {}
+            for attr_key in acquisition_group.attrs:
+                self.acquisition_metadata[attr_key] = acquisition_group.attrs[attr_key]
 
     def getPhotodiodeData(self):
         with h5py.File(self.file_path, 'r') as experiment_file:
@@ -238,7 +248,7 @@ class ImagingDataObject():
             if np.any(stack_inds > response_trace.shape[1]):
                 cut_inds = np.append(cut_inds, idx)
                 continue
-            if idx is not 0:
+            if idx != 0:
                 if len(stack_inds) < epoch_frames:  # missed images for the end of the stimulus
                     cut_inds = np.append(cut_inds, idx)
                     print('Missed acquisition frames at the end of the stimulus!')
@@ -259,8 +269,8 @@ class ImagingDataObject():
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)
         return time_vector, response_matrix
 
-    def generateRoiMap(self, roi_name, scale_bar_length=0):
-        newImage = plot_tools.overlayImage(self.roi.get(roi_name).get('roi_image'), self.roi.get(roi_name).get('roi_mask'), 0.5, self.colors)
+    def generateRoiMap(self, roi_name, scale_bar_length=0, z=0):
+        newImage = plot_tools.overlayImage(self.roi.get(roi_name).get('roi_image'), self.roi.get(roi_name).get('roi_mask'), 0.5, self.colors, z=z)
 
         fh = plt.figure(figsize=(4,4))
         ax = fh.add_subplot(111)

@@ -224,16 +224,17 @@ class BrukerPlugin(plugin.base.BasePlugin):
                         for subsubchild in list(subchild):
                             new_key = child.get('key') + '_' + subchild.get('index') + subsubchild.get('subindex')
                             new_value = subsubchild.get('value')
+                            metadata[new_key] = new_value
 
                     else:
                         new_key = child.get('key') + '_' + subchild.get('index')
                         new_value = subchild.get('value')
+                        metadata[new_key] = new_value
 
             else:
                 new_key = child.get('key')
                 new_value = child.get('value')
-
-            metadata[new_key] = new_value
+                metadata[new_key] = new_value
 
         metadata['version'] = root.get('version')
         metadata['date'] = root.get('date')
