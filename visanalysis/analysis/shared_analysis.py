@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import glob
 import h5py
+import os
 
 from visanalysis import plot_tools
 
@@ -131,7 +132,9 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
     Returns
         -matching_series: List of matching series dicts with all fly & run params as well as file name and series number
     """
-    fileNames = glob.glob(data_directory + "*.hdf5")
+    fileNames = glob.glob(data_directory + "/*.hdf5")
+    print('Found {} files in {}'.format(len(fileNames), data_directory))
+    # print(fileNames)
 
     # collect key/value pairs for all series in data directory
     all_series = []
