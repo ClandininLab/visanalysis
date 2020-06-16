@@ -69,8 +69,9 @@ class BasePlugin():
         """
         args
             experiment_file_name: string, name of hdf5 data file
-            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
             file_path: string, full path to hdf5 data file
+            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
+
 
         accesses hdf5 data file and attaches data/metadata to each series
             -stimulus_timing group:
