@@ -20,4 +20,4 @@ experiment_file_name = os.path.split(experiment_filepath)[-1].split('.')[0]
 
 plug.attachData(experiment_file_name, experiment_filepath, data_directory)
 
-print('Attached data to {}'.format(experiment_file))
+print('Attached data to {}'.format(experiment_filepath))
