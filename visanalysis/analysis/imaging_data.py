@@ -113,53 +113,58 @@ class ImagingDataObject():
             returns stimulus timing information based on photodiode voltage trace from alternating frame tracker signal
 
         """
-        frame_monitor = self.photodiode_trace.copy()
+        frame_monitor_channels = self.photodiode_trace.copy()
         time_vector = self.photodiode_time_vector.copy()
         sample_rate = self.photodiode_sample_rate.copy()
 
-        # Low-pass filter frame_monitor trace
-        b, a = signal.butter(4, 10*command_frame_rate, btype='low', fs=sample_rate)
-        frame_monitor = signal.filtfilt(b, a, frame_monitor)
+        num_channels = frame_monitor_channels.shape[0]
+        for ch in range(num_channels):
+            frame_monitor = frame_monitor_channels[ch, :]
 
-        # shift & normalize so frame monitor trace lives on [0 1]
-        frame_monitor = frame_monitor - np.min(frame_monitor)
-        frame_monitor = frame_monitor / np.max(frame_monitor)
+            # Low-pass filter frame_monitor trace
+            b, a = signal.butter(4, 10*command_frame_rate, btype='low', fs=sample_rate)
+            frame_monitor = signal.filtfilt(b, a, frame_monitor)
 
-        # find lightcrafter frame flip times
-        V_orig = frame_monitor[0:-2]
-        V_shift = frame_monitor[1:-1]
-        ups = np.where(np.logical_and(V_orig < threshold, V_shift >= threshold))[0] + 1
-        downs = np.where(np.logical_and(V_orig >= threshold, V_shift < threshold))[0] + 1
-        frame_times = np.sort(np.append(ups, downs))
+            # shift & normalize so frame monitor trace lives on [0 1]
+            frame_monitor = frame_monitor - np.min(frame_monitor)
+            frame_monitor = frame_monitor / np.max(frame_monitor)
 
-        # Use frame flip times to find stimulus start times
-        stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
-        stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
-        stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
-        stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
+            # find frame flip times
+            V_orig = frame_monitor[0:-2]
+            V_shift = frame_monitor[1:-1]
+            ups = np.where(np.logical_and(V_orig < threshold, V_shift >= threshold))[0] + 1
+            downs = np.where(np.logical_and(V_orig >= threshold, V_shift < threshold))[0] + 1
+            frame_times = np.sort(np.append(ups, downs))
 
-        # Find dropped frames and calculate frame rate
-        interval_duration = np.diff(frame_times)
-        frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
-        ideal_frame_len = 1 / command_frame_rate * sample_rate  # datapoints
-        dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
-        if len(dropped_frame_inds) > 0:
-            print('Warning! Dropped ' + str(len(dropped_frame_inds)) + ' frame(s)')
-        good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) < frame_slop)[0]
-        measured_frame_len = np.mean(frame_len[good_frame_inds])  # datapoints
-        frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
+            # Use frame flip times to find stimulus start times
+            stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
+            stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
+            stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
+            stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
 
-        if plot_trace_flag:
-            self.frame_monitor_figure = plt.figure(figsize=(16, 6))
-            ax = self.frame_monitor_figure.add_subplot(111)
-            ax.plot(time_vector, frame_monitor)
-            ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape),'ko')
-            ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
-            ax.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
-            ax.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
-            ax.set_title('Frame rate = {} Hz'.format(frame_rate))
-            plt.show()
+            # Find dropped frames and calculate frame rate
+            interval_duration = np.diff(frame_times)
+            frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
+            ideal_frame_len = 1 / command_frame_rate * sample_rate  # datapoints
+            dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
+            if len(dropped_frame_inds) > 0:
+                print('Warning! Dropped ' + str(len(dropped_frame_inds)) + ' frame(s)')
+            good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) < frame_slop)[0]
+            measured_frame_len = np.mean(frame_len[good_frame_inds])  # datapoints
+            frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
 
+            if plot_trace_flag:
+                self.frame_monitor_figure = plt.figure(figsize=(16, 6))
+                ax = self.frame_monitor_figure.add_subplot(111)
+                ax.plot(time_vector, frame_monitor)
+                ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape),'ko')
+                ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
+                ax.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
+                ax.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
+                ax.set_title('Frame rate = {} Hz'.format(frame_rate))
+                plt.show()
+
+        # for stimulus_timing just use one of the channels, both *should* be in sync
         self.stimulus_timing = {'frame_times': frame_times,
                                 'stimulus_end_times': stimulus_end_times,
                                 'stimulus_start_times': stimulus_start_times,

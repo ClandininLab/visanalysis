@@ -265,7 +265,10 @@ class BrukerPlugin(plugin.base.BasePlugin):
         data_frame = pd.read_csv(os.path.join(data_directory, image_series_name) + v_rec_suffix + '.csv');
 
         time_vector = data_frame.get('Time(ms)').values / 1e3  # ->sec
-        #for now takes first enabled channel.
-        frame_monitor = data_frame.get(' ' + active_channels[0]).values
+
+        frame_monitor = [] # get responses in all active channels
+        for ac in active_channels:
+            frame_monitor.append(data_frame.get(' ' + ac).values)
+        frame_monitor = np.vstack(frame_monitor)
 
         return frame_monitor, time_vector, sample_rate
