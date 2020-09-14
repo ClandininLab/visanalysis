@@ -148,7 +148,7 @@ class ImagingDataObject():
             ideal_frame_len = 1 / command_frame_rate * sample_rate  # datapoints
             dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
             if len(dropped_frame_inds) > 0:
-                print('Warning! Dropped ' + str(len(dropped_frame_inds)) + ' frame(s)')
+                print('Warning! Ch. {} Dropped {} frames'.format(ch, len(dropped_frame_inds)))
             good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) < frame_slop)[0]
             measured_frame_len = np.mean(frame_len[good_frame_inds])  # datapoints
             frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
@@ -161,7 +161,7 @@ class ImagingDataObject():
                 ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
                 ax.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
                 ax.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
-                ax.set_title('Frame rate = {} Hz'.format(frame_rate))
+                ax.set_title('Ch. {}: Frame rate = {} Hz'.format(ch, frame_rate))
                 plt.show()
 
         # for stimulus_timing just use one of the channels, both *should* be in sync
