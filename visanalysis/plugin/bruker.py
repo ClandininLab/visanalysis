@@ -141,22 +141,30 @@ class BrukerPlugin(plugin.base.BasePlugin):
         print('Stacks registered')
 
     def loadImageSeries(self, experiment_file_name, data_directory, series_number):
+        # TODO: fix this to load/trim etc based on imaging metadata, not stack formats and shapes
         image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-        # check file name suffix to decide whether this is xyt (.tif) or xyzt (.nii) file
+        # check file name suffix to decide whether this is (.tif) or (.nii) file
         tif_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
         nii_file_path = os.path.join(data_directory, image_series_name) + '_reg.nii'
-        if os.path.isfile(tif_file_path): # TODO fix me
+        if os.path.isfile(tif_file_path): # tif assumed to be tyx series
             # native axes order is tyx: convert to xyzt, with z dummy axis
             image_series = io.imread(tif_file_path)
             image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
             self.volume_analysis = False
             print('Loaded xyt image series {}'.format(tif_file_path))
 
-        elif os.path.isfile(nii_file_path):
+        elif os.path.isfile(nii_file_path): # nib could be either xyt or xyzt
             channel_index = 1  # nii data is xyztc, select only green channel
-            image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :, channel_index])  # xyzt
-            self.volume_analysis = True
-            print('Loaded xyzt image series {}'.format(nii_file_path))
+            nib_brain = np.asanyarray(nib.load(nii_file_path).dataobj)
+            brain_dims = nib_brain.shape
+            if len(brain_dims) == 3: # xyt
+                image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
+                self.volume_analysis = False
+                print('Loaded xyt image series {}'.format(nii_file_path))
+            elif len(brain_dims) == 4: # xyzt
+                image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :, channel_index])  # xyzt
+                self.volume_analysis = True
+                print('Loaded xyzt image series {}'.format(nii_file_path))
 
         else:
             self.volume_analysis = False
