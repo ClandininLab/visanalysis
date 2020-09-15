@@ -89,6 +89,8 @@ class ImagingDataObject():
             stimulus_timing_group = epoch_run_group['stimulus_timing']
 
             self.photodiode_trace = stimulus_timing_group.get('frame_monitor')[:]
+            if len(self.photodiode_trace.shape) < 2:
+                self.photodiode_trace = self.photodiode_trace[np.newaxis, :] # dummy dim for single channel photodiode
             self.photodiode_time_vector = stimulus_timing_group.get('time_vector')[:]
             self.photodiode_sample_rate = stimulus_timing_group.attrs['sample_rate']
 
