@@ -92,9 +92,10 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
         n_voxels, t_dim, trials = voxel_trial_matrix.shape
 
-        mean_voxel_response = np.ndarray(shape=(n_voxels, t_dim, n_stimuli))
+        mean_voxel_response = np.ndarray(shape=(n_voxels, t_dim, n_stimuli)) # voxels x time x stim condition
         p_values = np.ndarray(shape=(n_voxels, n_stimuli))
-        response_amp = np.ndarray(shape=(n_voxels, n_stimuli))
+        response_amp = np.ndarray(shape=(n_voxels, n_stimuli)) # mean voxel resp for each stim condition (voxel x stim)
+        trial_response_amp = [] #list (len=n_stimuli), each entry is ndarray of mean response (voxels x trials)
         for p_ind, up in enumerate(unique_parameter_values):
             pull_inds = np.where([up == x for x in parameter_values])[0]
 
@@ -105,11 +106,13 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
             _, p_values[:, p_ind] = stats.ttest_ind(np.reshape(baseline_pts, (n_voxels, -1)),
                                                           np.reshape(response_pts, (n_voxels, -1)), axis=1)
 
+            trial_response_amp.append(np.mean(response_pts, axis=1))  # each list entry = timee average. (voxels x trials)
+
             response_amp[:, p_ind] = np.mean(response_pts, axis=(1,2))
 
             mean_voxel_response[:, :, p_ind] = (np.mean(voxel_trial_matrix[:, :, pull_inds], axis=2))
 
-        return mean_voxel_response, unique_parameter_values, p_values, response_amp
+        return mean_voxel_response, unique_parameter_values, p_values, response_amp, trial_response_amp
 
 def loadFunctionalBrain(file_path, x_lim=[0, None], y_lim=[0, None], z_lim=[0, None], t_lim=[0, None], channel=1):
     brain = nib.load(file_path).get_fdata()
