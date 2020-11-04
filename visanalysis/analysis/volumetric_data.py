@@ -64,7 +64,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
             try:
                 voxel_trial_matrix[:, :, idx] = new_resp_chunk[:, 0:epoch_frames]
             except:
-                print('Size mismatch idx = {}'.format(idx))
+                print('Size mismatch idx = {}'.format(idx)) # the end of a response clipped off
                 cut_inds = np.append(cut_inds, idx)
 
         voxel_trial_matrix = np.delete(voxel_trial_matrix, cut_inds, axis=2)
