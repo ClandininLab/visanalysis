@@ -61,7 +61,11 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
                 # to dF/F
                 new_resp_chunk = (new_resp_chunk - baseline) / baseline;
 
-            voxel_trial_matrix[:, :, idx] = new_resp_chunk[:, 0:epoch_frames]
+            try:
+                voxel_trial_matrix[:, :, idx] = new_resp_chunk[:, 0:epoch_frames]
+            except:
+                print('Size mismatch idx = {}'.format(idx))
+                cut_inds = np.append(cut_inds, idx)
 
         voxel_trial_matrix = np.delete(voxel_trial_matrix, cut_inds, axis=2)
 
@@ -106,7 +110,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
             _, p_values[:, p_ind] = stats.ttest_ind(np.reshape(baseline_pts, (n_voxels, -1)),
                                                           np.reshape(response_pts, (n_voxels, -1)), axis=1)
 
-            trial_response_amp.append(np.mean(response_pts, axis=1))  # each list entry = timee average. (voxels x trials)
+            trial_response_amp.append(np.nanmean(response_pts, axis=1))  # each list entry = timee average. (voxels x trials)
 
             response_amp[:, p_ind] = np.mean(response_pts, axis=(1,2))
 
