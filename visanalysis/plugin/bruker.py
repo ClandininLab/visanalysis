@@ -161,7 +161,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
                 self.volume_analysis = False
                 print('Loaded xyt image series {}'.format(nii_file_path))
-            elif len(brain_dims) == 4: # xyzt
+            elif len(brain_dims) == 5: # xyzt
                 image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :, channel_index])  # xyzt
                 self.volume_analysis = True
                 print('Loaded xyzt image series {}'.format(nii_file_path))
