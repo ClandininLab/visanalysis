@@ -114,7 +114,6 @@ class ImagingDataObject():
                                    frame_slop=20,  # datapoints +/- ideal frame duration
                                    command_frame_rate=120):
         """
-        getEpochAndFrameTiming(self, time_vector, frame_monitor, sample_rate)
             returns stimulus timing information based on photodiode voltage trace from alternating frame tracker signal
 
         """
@@ -159,7 +158,11 @@ class ImagingDataObject():
                 good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) <= frame_slop)[0]
                 frame_durations.append(frame_len[good_frame_inds]) # only include non-dropped frames in frame rate calc
 
-            dropped_frame_times = np.hstack(dropped_frame_times) # datapoints
+            if len(dropped_frame_times) > 0:
+                dropped_frame_times = np.hstack(dropped_frame_times) # datapoints
+            else:
+                dropped_frame_times = np.array(dropped_frame_times)
+                
             frame_durations = np.hstack(frame_durations) # datapoints
             measured_frame_len = np.mean(frame_durations)  # datapoints
             frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
