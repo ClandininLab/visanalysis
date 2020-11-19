@@ -8,6 +8,9 @@ Associated with a data file and series number
 import numpy as np
 import os
 import h5py
+# import matplotlib
+# matplotlib.use('Qt5Agg')
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.signal as signal
@@ -106,7 +109,7 @@ class ImagingDataObject():
 
     def computeEpochAndFrameTiming(self,
                                    plot_trace_flag=True,
-                                   threshold=0.6,
+                                   threshold=0.8,
                                    minimum_epoch_separation=2e3,  # datapoints
                                    frame_slop=20,  # datapoints +/- ideal frame duration
                                    command_frame_rate=120):
@@ -140,30 +143,49 @@ class ImagingDataObject():
 
             # Use frame flip times to find stimulus start times
             stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
-            stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0],len(frame_times)-1)
+            stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0], len(frame_times)-1)
             stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
             stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
 
-            # Find dropped frames and calculate frame rate
-            interval_duration = np.diff(frame_times)
-            frame_len = interval_duration[np.where(interval_duration < minimum_epoch_separation)]
             ideal_frame_len = 1 / command_frame_rate * sample_rate  # datapoints
-            dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0]
-            if len(dropped_frame_inds) > 0:
-                print('Warning! Ch. {} Dropped {} frames'.format(ch, len(dropped_frame_inds)))
-            good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) < frame_slop)[0]
-            measured_frame_len = np.mean(frame_len[good_frame_inds])  # datapoints
+            frame_durations = []
+            dropped_frame_times = []
+            for s_ind, ss in enumerate(stimulus_start_frames):
+                frame_len = np.diff(frame_times[stimulus_start_frames[s_ind]:stimulus_end_frames[s_ind]+1])
+                dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0] + 1 # +1 b/c diff
+                if len(dropped_frame_inds) > 0:
+                    dropped_frame_times.append(frame_times[ss]+dropped_frame_inds * ideal_frame_len) # time when dropped frames should have flipped
+                    print('Warning! Ch. {} Dropped {} frames in epoch {}'.format(ch, len(dropped_frame_inds), s_ind))
+                good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) <= frame_slop)[0]
+                frame_durations.append(frame_len[good_frame_inds]) # only include non-dropped frames in frame rate calc
+
+            dropped_frame_times = np.hstack(dropped_frame_times) # datapoints
+            frame_durations = np.hstack(frame_durations) # datapoints
+            measured_frame_len = np.mean(frame_durations)  # datapoints
             frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
 
             if plot_trace_flag:
-                self.frame_monitor_figure = plt.figure(figsize=(16, 6))
-                ax = self.frame_monitor_figure.add_subplot(111)
+                self.frame_monitor_figure = plt.figure(figsize=(8, 8))
+                gs1 = gridspec.GridSpec(2, 2)
+                ax = self.frame_monitor_figure.add_subplot(gs1[1, :])
                 ax.plot(time_vector, frame_monitor)
-                ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape),'ko')
-                ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape),'go')
-                ax.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape),'ro')
-                ax.plot(frame_times[dropped_frame_inds] / sample_rate, 1 * np.ones(dropped_frame_inds.shape),'ro')
-                ax.set_title('Ch. {}: Frame rate = {} Hz'.format(ch, frame_rate))
+                # ax.plot(time_vector[frame_times], threshold * np.ones(frame_times.shape), 'ko')
+                ax.plot(stimulus_start_times, threshold * np.ones(stimulus_start_times.shape), 'go')
+                ax.plot(stimulus_end_times, threshold * np.ones(stimulus_end_times.shape), 'ro')
+                ax.plot(dropped_frame_times / sample_rate, 1 * np.ones(dropped_frame_times.shape), 'rx')
+                ax.set_title('Ch. {}: Frame rate = {:.2f} Hz'.format(ch, frame_rate), fontsize=12)
+
+                ax = self.frame_monitor_figure.add_subplot(gs1[0, 0])
+                ax.hist(frame_durations)
+                ax.axvline(ideal_frame_len, color='k')
+                ax.set_xlabel('Frame duration (datapoints)')
+
+                ax = self.frame_monitor_figure.add_subplot(gs1[0, 1])
+                ax.plot(stimulus_end_times - stimulus_start_times, 'b.')
+                ax.set_xlabel('Epoch')
+                ax.set_ylabel('Stim duration (sec)')
+
+                self.frame_monitor_figure.tight_layout()
                 plt.show()
 
         # for stimulus_timing just use one of the channels, both *should* be in sync
