@@ -67,7 +67,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
                 print('Size mismatch idx = {}'.format(idx)) # the end of a response clipped off
                 cut_inds = np.append(cut_inds, idx)
 
-        voxel_trial_matrix = np.delete(voxel_trial_matrix, cut_inds, axis=2)
+        voxel_trial_matrix = np.delete(voxel_trial_matrix, cut_inds, axis=2) # shape = (voxel, time, trial)
 
         return time_vector, voxel_trial_matrix
 
@@ -85,8 +85,6 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
         else:
             parameter_values = [ep.get(parameter_key) for ep in self.epoch_parameters]
 
-
-
         unique_parameter_values = np.unique(parameter_values)
         n_stimuli = len(unique_parameter_values)
 
@@ -99,7 +97,9 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
         mean_voxel_response = np.ndarray(shape=(n_voxels, t_dim, n_stimuli)) # voxels x time x stim condition
         p_values = np.ndarray(shape=(n_voxels, n_stimuli))
         response_amp = np.ndarray(shape=(n_voxels, n_stimuli)) # mean voxel resp for each stim condition (voxel x stim)
-        trial_response_amp = [] #list (len=n_stimuli), each entry is ndarray of mean response (voxels x trials)
+        trial_response_amp = [] # list (len=n_stimuli), each entry is ndarray of mean response amplitudes (voxels x trials)
+        trial_response_by_stimulus = [] # list (len=n_stimuli), each entry is ndarray of trial response (voxel x time x trial)
+
         for p_ind, up in enumerate(unique_parameter_values):
             pull_inds = np.where([up == x for x in parameter_values])[0]
 
@@ -108,15 +108,17 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
             response_pts = voxel_trial_matrix[:, pre_frames:(pre_frames+stim_frames), pull_inds]
 
             _, p_values[:, p_ind] = stats.ttest_ind(np.reshape(baseline_pts, (n_voxels, -1)),
-                                                          np.reshape(response_pts, (n_voxels, -1)), axis=1)
+                                                    np.reshape(response_pts, (n_voxels, -1)), axis=1)
 
             trial_response_amp.append(np.nanmean(response_pts, axis=1))  # each list entry = timee average. (voxels x trials)
 
-            response_amp[:, p_ind] = np.mean(response_pts, axis=(1,2))
+            response_amp[:, p_ind] = np.mean(response_pts, axis=(1, 2))
 
             mean_voxel_response[:, :, p_ind] = (np.mean(voxel_trial_matrix[:, :, pull_inds], axis=2))
+            trial_response_by_stimulus.append(voxel_trial_matrix[:, :, pull_inds])
 
-        return mean_voxel_response, unique_parameter_values, p_values, response_amp, trial_response_amp
+        return mean_voxel_response, unique_parameter_values, p_values, response_amp, trial_response_amp, trial_response_by_stimulus
+
 
 def loadFunctionalBrain(file_path, x_lim=[0, None], y_lim=[0, None], z_lim=[0, None], t_lim=[0, None], channel=1):
     brain = nib.load(file_path).get_fdata()
