@@ -199,6 +199,11 @@ class ImagingDataObject():
             # Print timing summary
             print('===================TIMING: Channel {}======================'.format(ch))
             print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(self.epoch_parameters)))
+            inter_stim_starts = np.diff(stimulus_start_times)
+            print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
+                                                                                                                     np.median(inter_stim_starts),
+                                                                                                                     inter_stim_starts.max(),
+                                                                                                                     self.run_parameters['stim_time'] + self.run_parameters['pre_time'] + self.run_parameters['tail_time']))
             print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), self.run_parameters['stim_time']))
             total_frames = len(frame_times)
             dropped_frames = len(dropped_frame_times)

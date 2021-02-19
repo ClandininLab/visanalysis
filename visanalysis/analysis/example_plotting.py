@@ -4,13 +4,14 @@ import numpy as np
 
 experiment_file_directory = '/home/mhturner/CurrentData'
 experiment_file_name = '2021-02-17'
-series_number = 8
+series_number = 7
 
 kwargs = {'plot_trace_flag': True}
 
 ID = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number, kwargs=kwargs)
 
 # %%
+
 roi_set_name = 'terms'
 ID.getRoiResponses()
 ID.roi.get(roi_set_name)['roi_response'][0].shape
