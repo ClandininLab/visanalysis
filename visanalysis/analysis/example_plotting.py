@@ -1,14 +1,15 @@
 from visanalysis.analysis import imaging_data, shared_analysis
 import matplotlib.pyplot as plt
+import numpy as np
 
-experiment_file_directory = '/home/mhturner/CurrentData/20201026'
-experiment_file_name = '2020-10-26'
-series_number = 2
+experiment_file_directory = '/home/mhturner/CurrentData'
+experiment_file_name = '2021-02-17'
+series_number = 8
 
-kwargs = {'plot_trace_flag': True,
-                 'minimum_epoch_separation': 2e3}
+kwargs = {'plot_trace_flag': True}
 
 ID = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number, kwargs=kwargs)
+
 # %%
 roi_set_name = 'terms'
 ID.getRoiResponses()

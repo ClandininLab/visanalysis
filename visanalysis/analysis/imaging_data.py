@@ -21,8 +21,7 @@ from visanalysis import plot_tools
 
 class ImagingDataObject():
     def __init__(self, experiment_file_directory, experiment_file_name, series_number, kwargs=None):
-        kwargs_passed = {'plot_trace_flag': False,
-                         'minimum_epoch_separation': 2e3}
+        kwargs_passed = {'plot_trace_flag': False}
 
         if kwargs is not None:
             for key in kwargs:
@@ -44,7 +43,7 @@ class ImagingDataObject():
         # Retrieve: response_timing
         self.getResponseTiming()
         # Calculate stimulus_timing
-        self.computeEpochAndFrameTiming(plot_trace_flag=kwargs_passed['plot_trace_flag'], minimum_epoch_separation=kwargs_passed['minimum_epoch_separation'])
+        self.computeEpochAndFrameTiming(plot_trace_flag=kwargs_passed['plot_trace_flag'])
 
         self.colors = sns.color_palette("Set2", n_colors=20)
 
@@ -110,7 +109,6 @@ class ImagingDataObject():
     def computeEpochAndFrameTiming(self,
                                    plot_trace_flag=True,
                                    threshold=0.8,
-                                   minimum_epoch_separation=2e3,  # datapoints
                                    frame_slop=20,  # datapoints +/- ideal frame duration
                                    command_frame_rate=120):
         """
@@ -120,6 +118,8 @@ class ImagingDataObject():
         frame_monitor_channels = self.photodiode_trace.copy()
         time_vector = self.photodiode_time_vector.copy()
         sample_rate = self.photodiode_sample_rate.copy()
+
+        minimum_epoch_separation = 0.9 * (self.run_parameters['pre_time'] + self.run_parameters['tail_time']) * sample_rate
 
         num_channels = frame_monitor_channels.shape[0]
         for ch in range(num_channels):
@@ -154,7 +154,7 @@ class ImagingDataObject():
                 dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>frame_slop)[0] + 1 # +1 b/c diff
                 if len(dropped_frame_inds) > 0:
                     dropped_frame_times.append(frame_times[ss]+dropped_frame_inds * ideal_frame_len) # time when dropped frames should have flipped
-                    print('Warning! Ch. {} Dropped {} frames in epoch {}'.format(ch, len(dropped_frame_inds), s_ind))
+                    # print('Warning! Ch. {} Dropped {} frames in epoch {}'.format(ch, len(dropped_frame_inds), s_ind))
                 good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) <= frame_slop)[0]
                 frame_durations.append(frame_len[good_frame_inds]) # only include non-dropped frames in frame rate calc
 
@@ -162,13 +162,13 @@ class ImagingDataObject():
                 dropped_frame_times = np.hstack(dropped_frame_times) # datapoints
             else:
                 dropped_frame_times = np.array(dropped_frame_times)
-                
+
             frame_durations = np.hstack(frame_durations) # datapoints
             measured_frame_len = np.mean(frame_durations)  # datapoints
             frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
 
             if plot_trace_flag:
-                self.frame_monitor_figure = plt.figure(figsize=(8, 8))
+                self.frame_monitor_figure = plt.figure(figsize=(12, 8))
                 gs1 = gridspec.GridSpec(2, 2)
                 ax = self.frame_monitor_figure.add_subplot(gs1[1, :])
                 ax.plot(time_vector, frame_monitor)
@@ -183,19 +183,33 @@ class ImagingDataObject():
                 ax.axvline(ideal_frame_len, color='k')
                 ax.set_xlabel('Frame duration (datapoints)')
 
+                stim_durations = stimulus_end_times - stimulus_start_times # sec
                 ax = self.frame_monitor_figure.add_subplot(gs1[0, 1])
-                ax.plot(stimulus_end_times - stimulus_start_times, 'b.')
+                ax.plot(stim_durations, 'b.')
+                ax.axhline(y=self.run_parameters['stim_time'], xmin=0, xmax=self.run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
+                ymin = np.min([0.9 * self.run_parameters['stim_time'], np.min(stim_durations)])
+                ymax = np.max([1.1 * self.run_parameters['stim_time'], np.max(stim_durations)])
+                ax.set_ylim([ymin, ymax])
                 ax.set_xlabel('Epoch')
                 ax.set_ylabel('Stim duration (sec)')
 
                 self.frame_monitor_figure.tight_layout()
                 plt.show()
 
+            # Print timing summary
+            print('===================TIMING: Channel {}======================'.format(ch))
+            print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(self.epoch_parameters)))
+            print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), self.run_parameters['stim_time']))
+            total_frames = len(frame_times)
+            dropped_frames = len(dropped_frame_times)
+            print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
+            print('==========================================================')
+
         # for stimulus_timing just use one of the channels, both *should* be in sync
         self.stimulus_timing = {'frame_times': frame_times,
                                 'stimulus_end_times': stimulus_end_times,
                                 'stimulus_start_times': stimulus_start_times,
-                                'dropped_frame_inds': dropped_frame_inds,
+                                'dropped_frame_times': dropped_frame_times,
                                 'frame_rate': frame_rate}
 
     def getRoiResponses(self, background_subtraction=False):
