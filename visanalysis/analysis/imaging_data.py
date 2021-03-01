@@ -116,6 +116,8 @@ class ImagingDataObject():
 
         """
         frame_monitor_channels = self.photodiode_trace.copy()
+        if len(frame_monitor_channels.shape) == 1:
+            frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
         time_vector = self.photodiode_time_vector.copy()
         sample_rate = self.photodiode_sample_rate.copy()
 
