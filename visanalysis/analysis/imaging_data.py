@@ -148,6 +148,8 @@ class ImagingDataObject():
             stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
             stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
 
+            stim_durations = stimulus_end_times - stimulus_start_times # sec
+
             ideal_frame_len = 1 / command_frame_rate * sample_rate  # datapoints
             frame_durations = []
             dropped_frame_times = []
@@ -185,7 +187,6 @@ class ImagingDataObject():
                 ax.axvline(ideal_frame_len, color='k')
                 ax.set_xlabel('Frame duration (datapoints)')
 
-                stim_durations = stimulus_end_times - stimulus_start_times # sec
                 ax = self.frame_monitor_figure.add_subplot(gs1[0, 1])
                 ax.plot(stim_durations, 'b.')
                 ax.axhline(y=self.run_parameters['stim_time'], xmin=0, xmax=self.run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
