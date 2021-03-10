@@ -105,7 +105,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
             if np.any(pull_inds >= voxel_trial_matrix.shape[2]):
                 tmp = np.where(pull_inds >= voxel_trial_matrix.shape[2])[0]
-                print('Epoch(s) {} not included in voxel_trial_matrix'.format(tmp))
+                print('Epoch(s) {} not included in voxel_trial_matrix'.format(pull_inds[tmp]))
                 pull_inds = pull_inds[pull_inds < voxel_trial_matrix.shape[2]]
 
             baseline_pts = np.concatenate((voxel_trial_matrix[:, 0:pre_frames, pull_inds],
