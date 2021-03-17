@@ -163,12 +163,12 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 print('Loaded xyt image series {}'.format(nii_file_path))
 
             elif len(brain_dims) == 4: # xyzt
-                image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :])  # xyzt
+                image_series = nib_brain  # xyzt
                 self.volume_analysis = True
                 print('Loaded xyzt image series {}'.format(nii_file_path))
 
             elif len(brain_dims) == 5: # xyztc
-                image_series = np.squeeze(nib.load(nii_file_path).get_fdata()[:, :, :, :, channel_index])  # xyzt
+                image_series = np.squeeze(nib_brain[:, :, :, :, channel_index])  # xyzt
                 self.volume_analysis = True
                 print('Loaded xyzt image series {}'.format(nii_file_path))
 
