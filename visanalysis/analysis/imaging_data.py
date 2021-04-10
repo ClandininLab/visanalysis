@@ -20,12 +20,14 @@ from visanalysis import plot_tools
 
 
 class ImagingDataObject():
-    def __init__(self, experiment_file_directory, experiment_file_name, series_number, kwargs=None):
+    def __init__(self, experiment_file_directory, experiment_file_name, series_number, quiet=False, kwargs=None):
         kwargs_passed = {'plot_trace_flag': False}
 
         if kwargs is not None:
             for key in kwargs:
                 kwargs_passed[key] = kwargs[key]
+
+        self.quiet = quiet
 
         self.experiment_file_directory = experiment_file_directory
         self.experiment_file_name = experiment_file_name
@@ -199,19 +201,22 @@ class ImagingDataObject():
                 self.frame_monitor_figure.tight_layout()
                 plt.show()
 
-            # Print timing summary
-            print('===================TIMING: Channel {}======================'.format(ch))
-            print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(self.epoch_parameters)))
-            inter_stim_starts = np.diff(stimulus_start_times)
-            print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
-                                                                                                                     np.median(inter_stim_starts),
-                                                                                                                     inter_stim_starts.max(),
-                                                                                                                     self.run_parameters['stim_time'] + self.run_parameters['pre_time'] + self.run_parameters['tail_time']))
-            print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), self.run_parameters['stim_time']))
-            total_frames = len(frame_times)
-            dropped_frames = len(dropped_frame_times)
-            print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
-            print('==========================================================')
+            if self.quiet:
+                pass
+            else:
+                # Print timing summary
+                print('===================TIMING: Channel {}======================'.format(ch))
+                print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(self.epoch_parameters)))
+                inter_stim_starts = np.diff(stimulus_start_times)
+                print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
+                                                                                                                         np.median(inter_stim_starts),
+                                                                                                                         inter_stim_starts.max(),
+                                                                                                                         self.run_parameters['stim_time'] + self.run_parameters['pre_time'] + self.run_parameters['tail_time']))
+                print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), self.run_parameters['stim_time']))
+                total_frames = len(frame_times)
+                dropped_frames = len(dropped_frame_times)
+                print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
+                print('==========================================================')
 
         # for stimulus_timing just use one of the channels, both *should* be in sync
         self.stimulus_timing = {'frame_times': frame_times,
