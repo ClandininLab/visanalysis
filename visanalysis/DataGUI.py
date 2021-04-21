@@ -379,6 +379,8 @@ class DataGUI(QWidget):
         else:
             self.plugin = plugin.base.BasePlugin()
 
+        self.plugin.parent_gui = self
+
     def registerStacks(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         self.registerStacksThread = registerStacksThread(plugin=self.plugin,

@@ -13,7 +13,8 @@ import skimage.io as io
 from tifffile import imsave
 import functools
 import nibabel as nib
-
+from PyQt5.QtWidgets import QFileDialog
+from PyQt5 import Qt
 
 from visanalysis import plugin
 
@@ -177,9 +178,39 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 image_series = None
 
         else:
-            self.volume_analysis = False
-            image_series = None
-            print('File not found at: {} or {}'.format(tif_file_path, nii_file_path))
+            print('File not found at: {} or {}, select file manually'.format(tif_file_path, nii_file_path))
+            filePath, _ = QFileDialog.getOpenFileName(self.parent_gui, "Open image file")
+            print('User selected image file at {}'.format(filePath))
+            suffix = filePath.split('.')[-1]
+            if suffix == 'tif':
+                tif_file_path = filePath
+                image_series = io.imread(tif_file_path)
+                image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
+                self.volume_analysis = False
+                print('Loaded xyt image series {}'.format(tif_file_path))
+            elif suffix == 'nii':
+                nii_file_path = filePath
+                channel_index = 1  # nii data is xyztc, select only green channel
+                nib_brain = np.asanyarray(nib.load(nii_file_path).dataobj)
+                brain_dims = nib_brain.shape
+                if len(brain_dims) == 3: # xyt
+                    image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
+                    self.volume_analysis = False
+                    print('Loaded xyt image series {}'.format(nii_file_path))
+
+                elif len(brain_dims) == 4: # xyzt
+                    image_series = nib_brain  # xyzt
+                    self.volume_analysis = True
+                    print('Loaded xyzt image series {}'.format(nii_file_path))
+
+                elif len(brain_dims) == 5: # xyztc
+                    image_series = np.squeeze(nib_brain[:, :, :, :, channel_index])  # xyzt
+                    self.volume_analysis = True
+                    print('Loaded xyzt image series {}'.format(nii_file_path))
+
+                else:
+                    print('Unrecognized image dimensions')
+                    image_series = None
 
         return image_series
 
