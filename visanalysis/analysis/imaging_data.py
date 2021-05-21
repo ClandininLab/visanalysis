@@ -1,9 +1,10 @@
 """
-ImagingDataObject for visanalysis data files
-Associated with a data file and series number
+ImagingDataObject for visanalysis data files.
 
+Associated with an hdf5 data file and series number
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import numpy as np
 import os

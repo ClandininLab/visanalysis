@@ -97,6 +97,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             metadata = self.getMetaData(experiment_file_name,
                                         data_directory,
                                         series_number)
+
             # # # # Attach metadata to epoch run group in data file # # #\
             def find_series(name, obj, sn):
                 target_group_name = 'series_{}'.format(str(sn).zfill(3))
@@ -107,7 +108,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 find_partial = functools.partial(find_series, sn=series_number)
                 epoch_run_group = experiment_file.visititems(find_partial)
 
-                #make sure subgroups exist for stimulus and response timing
+                # make sure subgroups exist for stimulus and response timing
                 stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
                 plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
                 plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
@@ -123,7 +124,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
                     acquisition_group.attrs[key] = metadata[key]
 
             print('Attached data to series {}'.format(series_number))
-
 
     def loadImageSeries(self, data_directory, image_file_name, channel=0):
         image_file_path = os.path.join(data_directory, image_file_name)
@@ -162,10 +162,8 @@ class BrukerPlugin(plugin.base.BasePlugin):
     ###########################################################################
 
     def getAcquisitionTiming(self, experiment_file_name, data_directory, series_number):
-        """
-        Bruker imaging acquisition metadata based on the bruker metadata file (xml)
-        """
-        image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
+        """Bruker imaging acquisition metadata based on the bruker metadata file (xml)."""
+        image_series_name = 'TSeries-' + experiment_file_name.replace('-', '') + '-' + ('00' + str(series_number))[-3:]
         metaData = ET.parse(os.path.join(data_directory, image_series_name) + '.xml')
         root = metaData.getroot()
 
@@ -202,7 +200,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         return response_timing
 
     def getMetaData(self, experiment_file_name, data_directory, series_number):
-        image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
+        image_series_name = 'TSeries-' + experiment_file_name.replace('-', '') + '-' + ('00' + str(series_number))[-3:]
         metaData = ET.parse(os.path.join(data_directory, image_series_name) + '.xml')
         root = metaData.getroot()
 
@@ -227,6 +225,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 metadata[new_key] = new_value
 
         # Get axis dims
+        sequences = root.findall('Sequence')
         c_dim = len(sequences[0].findall('Frame')[0].findall('File')) # number of channels
         x_dim = metadata['pixelsPerLine']
         y_dim = metadata['linesPerFrame']
@@ -254,7 +253,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         """
         """
 
-        image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
+        image_series_name = 'TSeries-' + experiment_file_name.replace('-', '') + '-' + ('00' + str(series_number))[-3:]
         metadata = ET.parse(os.path.join(data_directory, image_series_name) + v_rec_suffix + '.xml')
         root = metadata.getroot()
         rate_node = root.find('Experiment').find('Rate')
@@ -269,7 +268,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 active_channels.append(channel_name)
 
         # Load frame tracker signal and pull frame/epoch timing info
-        data_frame = pd.read_csv(os.path.join(data_directory, image_series_name) + v_rec_suffix + '.csv');
+        data_frame = pd.read_csv(os.path.join(data_directory, image_series_name) + v_rec_suffix + '.csv')
 
         time_vector = data_frame.get('Time(ms)').values / 1e3  # ->sec
 

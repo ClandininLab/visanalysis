@@ -28,6 +28,8 @@ class BasePlugin():
 
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         """
+        Get 2D roi image for display, e.g. for GUI.
+
         args
             data_directory: string, dir. where acquisition data lives (usually user-indicated)
             image_file_name: string, filename of image file to use
@@ -41,6 +43,8 @@ class BasePlugin():
 
     def getRoiDataFromPath(self, roi_path):
         """
+        Compute roi response from roi path objects.
+
         args
             roi_path: matplotlib path object defining roi
         returns
@@ -49,6 +53,8 @@ class BasePlugin():
 
     def getRoiMaskFromPath(self, roi_path):
         """
+        Compute roi mask from roi path objects.
+
         args
             roi_path: matplotlib path object defining roi
 
@@ -58,6 +64,8 @@ class BasePlugin():
 
     def attachData(self, experiment_file_name, file_path, data_directory):
         """
+        Attach imaging metadata to visanalysis hdf5 file.
+
         args
             experiment_file_name: string, name of hdf5 data file
             file_path: string, full path to hdf5 data file
@@ -239,7 +247,7 @@ def getPathFromTreeItem(tree_item):
 
 def changeAttribute(file_path, group_path, attr_key, attr_val):
     # see https://github.com/CCampJr/LazyHDF5
-    #TODO: try to keep the type the same?
+    # TODO: try to keep the type the same?
     with h5py.File(file_path, 'r+') as experiment_file:
         group = experiment_file[group_path]
         group.attrs[attr_key] = attr_val

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun 21 10:51:42 2018
+Data file GUI and ROI drawer for visanalysis.
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import sys
 import matplotlib.pyplot as plt
@@ -15,14 +16,16 @@ from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
-                             QTableWidget, QTableWidgetItem, QToolBar, QSlider,
-                             QMessageBox, QTreeWidget, QTreeWidgetItem, QCheckBox)
+                             QTableWidget, QTableWidgetItem, QSlider,
+                             QMessageBox, QTreeWidget, QTreeWidgetItem)
 import PyQt5.QtCore as QtCore
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 
 from visanalysis import plot_tools, plugin
+
+import psutil
 
 
 class DataGUI(QWidget):
@@ -122,7 +125,6 @@ class DataGUI(QWidget):
         # File name display
         self.currentImageFileNameLabel = QLabel('')
         self.group_control_grid.addWidget(self.currentImageFileNameLabel, 1, 0)
-
 
         # Channel drop down
         ch_label = QLabel('Channel:')
@@ -350,6 +352,12 @@ class DataGUI(QWidget):
             else:
                 print('Select a data directory before drawing rois')
 
+        # # # TEST # # #
+        memory_usage = psutil.Process(os.getpid()).memory_info().rss*10**-9
+        print('Current memory usage: {:.2f}GB'.format(memory_usage))
+        sys.stdout.flush()
+        # # # TEST # # #
+
     def updateExistingRoiSetList(self):
         if self.experiment_file_name is not None:
             file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -380,7 +388,6 @@ class DataGUI(QWidget):
             # Update figures
             self.redrawRoiTraces()
 
-
     def selectDataFile(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Open experiment (hdf5) file")
         self.experiment_file_name = os.path.split(filePath)[1].split('.')[0]
@@ -410,6 +417,11 @@ class DataGUI(QWidget):
 
         self.plugin.parent_gui = self
 
+        # # # TEST # # #
+        memory_usage = psutil.Process(os.getpid()).memory_info().rss*10**-9
+        print('Current memory usage: {:.2f}GB'.format(memory_usage))
+        sys.stdout.flush()
+        # # # TEST # # #
 
     def attachData(self):
         if self.data_directory is not None:
@@ -450,10 +462,6 @@ class DataGUI(QWidget):
             else:
                 print('Select a data directory before drawing rois')
 
-    def assignImageFileName(self):
-        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.plugin.attachImageFileName(file_path, series_number, image_file_name)
-
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
@@ -472,15 +480,14 @@ class DataGUI(QWidget):
         else:
             print('Delete aborted')
 
-
     def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         self.group_dset_dict = plugin.base.getHierarchy(file_path)
         self._populateTree(self.groupTree, self.group_dset_dict)
 
-    def populate_attrs(self, attr_dict=None, editable_values = False):
-        """ Populate attribute for currently selected group """
-        self.tableAttributes.blockSignals(True) #block udpate signals for auto-filled forms
+    def populate_attrs(self, attr_dict=None, editable_values=False):
+        """Populate attribute for currently selected group."""
+        self.tableAttributes.blockSignals(True) # block udpate signals for auto-filled forms
         self.tableAttributes.setRowCount(0)
         self.tableAttributes.setColumnCount(2)
         self.tableAttributes.setSortingEnabled(False)
@@ -489,14 +496,14 @@ class DataGUI(QWidget):
             for num, key in enumerate(attr_dict):
                 self.tableAttributes.insertRow(self.tableAttributes.rowCount())
                 key_item = QTableWidgetItem(key)
-                key_item.setFlags( QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled )
+                key_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 0, key_item)
 
                 val_item = QTableWidgetItem(str(attr_dict[key]))
                 if editable_values:
-                    val_item.setFlags( QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled )
+                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled)
                 else:
-                    val_item.setFlags( QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled )
+                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 1, val_item)
 
         self.tableAttributes.blockSignals(False)
@@ -505,7 +512,7 @@ class DataGUI(QWidget):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
 
-        attr_key = self.tableAttributes.item(item.row(),0).text()
+        attr_key = self.tableAttributes.item(item.row(), 0).text()
         attr_val = item.text()
 
         # update attr in file
@@ -533,7 +540,7 @@ class DataGUI(QWidget):
         self.roi_canvas.draw()
 
         self.roi_path_list = []
-        self.roi_z_list  = []
+        self.roi_z_list = []
         if init_lasso:
             if self.roi_type == 'circle':
                 self.lasso_1 = EllipseSelector(self.roi_ax, onselect=self.newEllipse, button=1)
