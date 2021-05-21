@@ -1,19 +1,19 @@
-import h5py
-import numpy as np
-from registration import CrossCorr
-import functools
-from visanalysis import plugin
-from visanalysis.analysis import imaging_data
-from matplotlib import path
-
-
 """
-Parent acquisition plugin class
+Parent acquisition plugin class for visanalysis.
 
 To define a new acquisition plugin, define the indicated methods
 in the plugin subclass to overwrite these placeholders
 
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
+
+import h5py
+import numpy as np
+import functools
+from visanalysis import plugin
+from visanalysis.analysis import imaging_data
+from matplotlib import path
 
 
 class BasePlugin():
@@ -41,7 +41,6 @@ class BasePlugin():
 
     def getRoiDataFromPath(self, roi_path):
         """
-        *self.current_series must be defined before calling this*
         args
             roi_path: matplotlib path object defining roi
         returns
@@ -50,7 +49,6 @@ class BasePlugin():
 
     def getRoiMaskFromPath(self, roi_path):
         """
-        *self.current_series must be defined before calling this*
         args
             roi_path: matplotlib path object defining roi
 
@@ -187,7 +185,6 @@ class BasePlugin():
         self.ImagingDataObject = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
 
     # roi display computation functions
-
     def getRoiResponse_TrialAverage(self, roi_response):
         time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
         trial_avg = np.mean(response_matrix, axis=(0, 1))

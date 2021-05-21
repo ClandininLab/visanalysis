@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri May 31 09:43:59 2019
+Bruker / Prairie View plugin for visanalysis.
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import os
 import xml.etree.ElementTree as ET
@@ -10,18 +11,11 @@ import numpy as np
 import pandas as pd
 import h5py
 import skimage.io as io
-from tifffile import imsave
 import functools
 import nibabel as nib
-from PyQt5.QtWidgets import QFileDialog
-from PyQt5 import Qt
 
 from visanalysis import plugin
 
-
-###########################################################################
-# Bruker plugin
-###########################################################################
 
 class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
@@ -33,9 +27,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
-            # self.current_series = self.loadImageSeries(kwargs.get('experiment_file_name'),
-            #                                            kwargs.get('data_directory'),
-            #                                            kwargs.get('series_number'))
             self.current_series = self.loadImageSeries(data_directory=data_directory,
                                                        image_file_name=image_file_name,
                                                        channel=channel)
@@ -49,10 +40,14 @@ class BrukerPlugin(plugin.base.BasePlugin):
         return roi_image
 
     def getRoiDataFromPath(self, roi_path):
-        # if series_number != self.current_series_number:
-        #     self.current_series_number = series_number
-        #     self.current_series = self.loadImageSeries(experiment_file_name, data_directory, series_number)
+        """
+        Compute roi response from roi path objects.
 
+        param:
+            roi_path: list of path objects
+
+        *Must first define self.current_series
+        """
         mask = self.getRoiMaskFromPath(roi_path)
 
         roi_response = np.mean(self.current_series[mask, :], axis=0, keepdims=True) - np.min(self.current_series)
@@ -61,8 +56,12 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
     def getRoiMaskFromPath(self, roi_path):
         """
-        roi_path is list of path objects
+        Compute roi mask from roi path objects.
 
+        param:
+            roi_path: list of path objects
+
+        *Must first define self.current_series
         """
         x_dim, y_dim, z_dim, t_dim = self.current_series.shape
 
@@ -156,82 +155,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 print('Unrecognized image dimensions')
                 image_series = None
         return image_series
-
-
-    #
-    # def loadImageSeries(self, experiment_file_name, data_directory, series_number):
-    #     # TODO: fix this to load/trim etc based on imaging metadata, not stack formats and shapes
-    #     image_series_name = 'TSeries-' + experiment_file_name.replace('-','') + '-' + ('00' + str(series_number))[-3:]
-    #     # check file name suffix to decide whether this is (.tif) or (.nii) file
-    #     tif_file_path = os.path.join(data_directory, image_series_name) + '_reg.tif'
-    #     nii_file_path = os.path.join(data_directory, image_series_name) + '_reg.nii'
-    #     if os.path.isfile(tif_file_path): # tif assumed to be tyx series
-    #         # native axes order is tyx: convert to xyzt, with z dummy axis
-    #         image_series = io.imread(tif_file_path)
-    #         image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
-    #         self.volume_analysis = False
-    #         print('Loaded xyt image series {}'.format(tif_file_path))
-    #
-    #     elif os.path.isfile(nii_file_path): # nib could be either xyt or xyzt
-    #         channel_index = 1  # nii data is xyztc, select only green channel
-    #         nib_brain = np.asanyarray(nib.load(nii_file_path).dataobj)
-    #         brain_dims = nib_brain.shape
-    #         if len(brain_dims) == 3: # xyt
-    #             image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
-    #             self.volume_analysis = False
-    #             print('Loaded xyt image series {}'.format(nii_file_path))
-    #
-    #         elif len(brain_dims) == 4: # xyzt
-    #             image_series = nib_brain  # xyzt
-    #             self.volume_analysis = True
-    #             print('Loaded xyzt image series {}'.format(nii_file_path))
-    #
-    #         elif len(brain_dims) == 5: # xyztc
-    #             image_series = np.squeeze(nib_brain[:, :, :, :, channel_index])  # xyzt
-    #             self.volume_analysis = True
-    #             print('Loaded xyzt image series {}'.format(nii_file_path))
-    #
-    #         else:
-    #             print('Unrecognized image dimensions')
-    #             image_series = None
-    #
-    #     else:
-    #         print('File not found at: {} or {}, select file manually'.format(tif_file_path, nii_file_path))
-            # filePath, _ = QFileDialog.getOpenFileName(self.parent_gui, "Open image file")
-            # print('User selected image file at {}'.format(filePath))
-    #         suffix = filePath.split('.')[-1]
-    #         if suffix == 'tif':
-    #             tif_file_path = filePath
-    #             image_series = io.imread(tif_file_path)
-    #             image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
-    #             self.volume_analysis = False
-    #             print('Loaded xyt image series {}'.format(tif_file_path))
-    #         elif suffix == 'nii':
-    #             nii_file_path = filePath
-    #             channel_index = 1  # nii data is xyztc, select only green channel
-    #             nib_brain = np.asanyarray(nib.load(nii_file_path).dataobj)
-    #             brain_dims = nib_brain.shape
-    #             if len(brain_dims) == 3: # xyt
-    #                 image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
-    #                 self.volume_analysis = False
-    #                 print('Loaded xyt image series {}'.format(nii_file_path))
-    #
-    #             elif len(brain_dims) == 4: # xyzt
-    #                 image_series = nib_brain  # xyzt
-    #                 self.volume_analysis = True
-    #                 print('Loaded xyzt image series {}'.format(nii_file_path))
-    #
-    #             elif len(brain_dims) == 5: # xyztc
-    #                 image_series = np.squeeze(nib_brain[:, :, :, :, channel_index])  # xyzt
-    #                 self.volume_analysis = True
-    #                 print('Loaded xyzt image series {}'.format(nii_file_path))
-    #
-    #             else:
-    #                 print('Unrecognized image dimensions')
-    #                 image_series = None
-    #
-    #     return image_series
-
 
     # %%
     ###########################################################################

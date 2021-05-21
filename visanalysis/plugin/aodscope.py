@@ -30,11 +30,9 @@ class AodScopePlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
 
-    def getRoiImage(self, **kwargs):
-        series_number = kwargs.get('series_number')
-        file_path = kwargs.get('file_path')
-        pmt = kwargs.get('pmt')
-        data_directory = kwargs.get('data_directory')
+    def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice=0):
+        file_path = os.path.join(self.ImagingDataObject.experiment_file_directory, self.ImagingDataObject.experiment_file_name)
+
         with h5py.File(file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, sn=series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
@@ -70,19 +68,28 @@ class AodScopePlugin(plugin.base.BasePlugin):
                 xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
                 xyt_data = self.getXytData(data_directory=data_directory,
                                            xyt_series_number=xyt_series_number,
-                                           pmt=pmt)
+                                           pmt=channel)
                 roi_image = np.mean(xyt_data['image_series'], axis=0)
 
         return roi_image
 
-    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
-        with h5py.File(experiment_file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, sn=series_number)
+    def getRoiMaskFromPath(self, roi_path, data_directory):
+        """
+        Compute roi mask from roi path objects.
+
+        param:
+            roi_path: list of path objects
+
+        *Must first define self.ImagingDataObject
+        """
+        file_path = os.path.join(self.ImagingDataObject.experiment_file_directory, self.ImagingDataObject.experiment_file_name)
+        with h5py.File(file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=self.ImagingDataObject.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group.require_group('acquisition')
             poi_scan = acquisition_group.attrs.get('poi_scan', True)
             if poi_scan:
-                poi_series_number = acquisition_group.attrs.get('poi_count', series_number)
+                poi_series_number = acquisition_group.attrs.get('poi_count', self.ImagingDataObject.series_number)
                 poi_data = self.getPoiData(data_directory=data_directory,
                                            poi_series_number=poi_series_number,
                                            pmt=1)
@@ -106,9 +113,9 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
             else:  # xyt scan
                 kwargs = {'data_directory': data_directory,
-                          'series_number': series_number,
-                          'experiment_file_name': experiment_file_name,
-                          'file_path': experiment_file_path,
+                          'series_number': self.ImagingDataObject.series_number,
+                          'experiment_file_name': self.ImagingDataObject.experiment_file_name,
+                          'file_path': file_path,
                           'pmt': 1}
                 roi_image = self.getRoiImage(**kwargs)
 
@@ -132,14 +139,23 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         return mask
 
-    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
-        with h5py.File(experiment_file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, sn=series_number)
+    def getRoiDataFromPath(self, roi_path, data_directory):
+        """
+        Compute roi response from roi path objects.
+
+        param:
+            roi_path: list of path objects
+
+        *Must first define self.ImagingDataObject
+        """
+        file_path = os.path.join(self.ImagingDataObject.experiment_file_directory, self.ImagingDataObject.experiment_file_name)
+        with h5py.File(file_path, 'r') as experiment_file:
+            find_partial = functools.partial(find_series, sn=self.ImagingDataObject.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group.require_group('acquisition')
             poi_scan = acquisition_group.attrs.get('poi_scan', True)
             if poi_scan:
-                poi_series_number = acquisition_group.attrs.get('poi_count', series_number)
+                poi_series_number = acquisition_group.attrs.get('poi_count', self.ImagingDataObject.series_number)
                 poi_data = self.getPoiData(data_directory=data_directory,
                                            poi_series_number=poi_series_number,
                                            pmt=1)
@@ -152,13 +168,13 @@ class AodScopePlugin(plugin.base.BasePlugin):
                     roi_response = np.mean(selected_poi_data, axis=0)
                 return roi_response
             else:
-                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
+                xyt_series_number = acquisition_group.attrs.get('xyt_count', self.ImagingDataObject.series_number)
                 xyt_data = self.getXytData(data_directory=data_directory,
                                            xyt_series_number=xyt_series_number,
                                            pmt=1)
 
                 roi_image = np.mean(xyt_data['image_series'], axis=0)
-                mask = self.getRoiMaskFromPath(roi_path, data_directory, series_number, experiment_file_name, experiment_file_path)
+                mask = self.getRoiMaskFromPath(roi_path)
                 roi_response = (np.mean(xyt_data['image_series'][:, mask], axis=1, keepdims=True) - np.min(xyt_data['image_series'])).T
                 return roi_response
 
@@ -166,37 +182,6 @@ class AodScopePlugin(plugin.base.BasePlugin):
         poi_series_number, xyt_series_number = self.getPoiAndXytSeriesNumbers(file_path)
         self.attachPoiData(experiment_file_name, file_path, data_directory, poi_series_number)
         self.attachXytData(experiment_file_name, file_path, data_directory, xyt_series_number)
-
-    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
-        print('Registering stacks...')
-        pmt = 1
-        _, series_numbers = self.getPoiAndXytSeriesNumbers(file_path)
-        for series_number in series_numbers:
-            with h5py.File(file_path, 'r') as experiment_file:
-                find_partial = functools.partial(find_series, sn=series_number)
-                epoch_run_group = experiment_file.visititems(find_partial)
-                acquisition_group = epoch_run_group.require_group('acquisition')
-                xyt_series_number = acquisition_group.attrs.get('xyt_count', series_number)
-            stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]
-            date_code = stack_dir[-9:-1]
-            stack_name = date_code + '_' + 'stack' + ('0000' + str(xyt_series_number))[-4:]
-            raw_file_path = os.path.join(data_directory, 'stack', stack_dir, stack_name + '_pmt' + str(pmt) + '.tif')
-
-            if os.path.isfile(raw_file_path):
-                image_series = io.imread(raw_file_path)
-            else:
-                print('File not found at {}'.format(raw_file_path))
-                continue
-
-            response_timing = self.getAcquisitionTiming(experiment_file_name,
-                                                        data_directory,
-                                                        xyt_series_number)
-
-            registered_series = self.registerStack(image_series, response_timing['time_points'])
-            save_path = raw_file_path.split('.')[0] + '_reg' + '.tif'
-            print('Saved: ' + save_path)
-            imsave(save_path, registered_series)
-        print('Stacks registered')
 
     def saveRoiSet(self, file_path, series_number,
                    roi_set_name,
@@ -354,11 +339,11 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
         try:
             tdms_file = TdmsFile(full_file_path)
-            time_points = tdms_file.channel_data('PMT'+str(pmt),'POI time') / 1e3  # msec -> sec
-            poi_data_matrix = np.ndarray(shape = (len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
+            time_points = tdms_file.channel_data('PMT'+str(pmt), 'POI time') / 1e3  # msec -> sec
+            poi_data_matrix = np.ndarray(shape=(len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
             poi_data_matrix[:] = np.nan
 
-            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])): #first object is time points. Subsequent for POIs
+            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])): # first object is time points. Subsequent for POIs
                 poi_data_matrix[poi_ind, :] = tdms_file.channel_data('PMT'+str(pmt), 'POI ' + str(poi_ind) + ' ')
 
             # get poi locations in raw coordinates:
@@ -483,7 +468,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                    xyt_series_number=xyt_series_number,
                                    pmt=1)
 
-        time_points = np.arange(0,xyt_data['image_series'].shape[0]) * sample_period
+        time_points = np.arange(0, xyt_data['image_series'].shape[0]) * sample_period
 
         return {'time_points': time_points,
                 'sample_period': sample_period}

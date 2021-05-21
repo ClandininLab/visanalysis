@@ -18,7 +18,6 @@ from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QTableWidget, QTableWidgetItem, QToolBar, QSlider,
                              QMessageBox, QTreeWidget, QTreeWidgetItem, QCheckBox)
 import PyQt5.QtCore as QtCore
-from PyQt5.QtCore import QThread
 import PyQt5.QtGui as QtGui
 import numpy as np
 import os
@@ -103,6 +102,11 @@ class DataGUI(QWidget):
         attachDatabutton = QPushButton("Attach metadata to file", self)
         attachDatabutton.clicked.connect(self.attachData)
         self.file_control_grid.addWidget(attachDatabutton, 2, 0, 1, 2)
+
+        # Select image data file
+        selectImageDataFileButton = QPushButton("Select image data file", self)
+        selectImageDataFileButton.clicked.connect(self.selectImageDataFile)
+        self.file_control_grid.addWidget(selectImageDataFileButton, 3, 0, 1, 2)
 
         # # # # File tree: # # # # # # # #  (1,0)
         self.groupTree = QTreeWidget(self)
@@ -365,8 +369,8 @@ class DataGUI(QWidget):
 
         if self.series_number is not None:
             self.roi_response = []
-            for path in self.roi_path:
-                new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=path)
+            for new_path in self.roi_path:
+                new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_path)
                 self.roi_response.append(new_roi_resp)
 
             # update slider to show most recently drawn roi response
@@ -414,6 +418,37 @@ class DataGUI(QWidget):
             print('Data attached')
         else:
             print('Select a data directory before attaching new data')
+
+    def selectImageDataFile(self):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+
+        image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
+        print('User selected image file at {}'.format(image_file_path))
+        self.image_file_name = os.path.split(image_file_path)[-1]
+        self.data_directory = os.path.split(image_file_path)[:-1][0]
+        plugin.base.attachImageFileName(file_path, self.series_number, self.image_file_name)
+        print('Attached image_file_name {} to series {}'.format(self.image_file_name, self.series_number))
+        print('Data directory is {}'.format(self.data_directory))
+
+        self.currentImageFileNameLabel.setText(self.image_file_name)
+
+        # show roi image
+        if self.series_number is not None:
+            if self.data_directory is not None:  # user has selected a raw data directory
+                self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
+                                                         image_file_name=self.image_file_name,
+                                                         series_number=self.series_number,
+                                                         channel=self.current_channel,
+                                                         z_slice=self.current_z_slice)
+                if len(self.roi_image) > 0:
+                    if self.plugin.volume_analysis:
+                        self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
+                    else:
+                        self.zSlider.setMaximum(0)
+                    self.redrawRoiTraces()
+
+            else:
+                print('Select a data directory before drawing rois')
 
     def assignImageFileName(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
