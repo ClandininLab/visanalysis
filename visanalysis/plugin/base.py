@@ -23,43 +23,36 @@ class BasePlugin():
         self.ImagingDataObject = None
 
     ###########################################################################
-    # Core methods - must these in child plugin definition
+    # Core methods - must overwrite these in child plugin definition
     ###########################################################################
 
-    def getRoiImage(self, **kwargs):
+    def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         """
-        kwargs
-            'data_directory': string, dir. where acquisition data lives (usually user-indicated)
-            'series_number': int, series in hdf5 data file
-            'experiment_file_name': string, name of hdf5 data file
-            'file_path': string, full path to hdf5 data file
-            'pmt': int, which pmt/channel to load
+        args
+            data_directory: string, dir. where acquisition data lives (usually user-indicated)
+            image_file_name: string, filename of image file to use
+            series_number: int, series in hdf5 data file
+            channel: int, which pmt/channel to load
+            z_slice: int, which z slice to load from z stack data
 
         returns
             roiImage: 2D image used to draw rois
         """
 
-    def getRoiDataFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiDataFromPath(self, roi_path):
         """
+        *self.current_series must be defined before calling this*
         args
             roi_path: matplotlib path object defining roi
-            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
-            series_number: int, series in hdf5 data file
-            experiment_file_name: string, name of hdf5 data file
-            experiment_file_path: string, full path to hdf5 data file
-
         returns
             roi_response: 1D numpy array, value of roi intensity as a function of acquisition time point
         """
 
-    def getRoiMaskFromPath(self, roi_path, data_directory, series_number, experiment_file_name, experiment_file_path):
+    def getRoiMaskFromPath(self, roi_path):
         """
+        *self.current_series must be defined before calling this*
         args
             roi_path: matplotlib path object defining roi
-            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
-            series_number: int, series in hdf5 data file
-            experiment_file_name: string, name of hdf5 data file
-            experiment_file_path: string, full path to hdf5 data file
 
         returns
             roi_mask: 2D array, boolean indices of where the roi mask was drawn
@@ -82,18 +75,6 @@ class BasePlugin():
                 attrs: acquisition metadata
                 anything else to stash in there
         """
-
-    def registerAndSaveStacks(self, experiment_file_name, file_path, data_directory):
-        """
-        args
-            experiment_file_name: string, name of hdf5 data file
-            data_direcory: string, dir. where acquisition data lives (usually user-indicated)
-            file_path: string, full path to hdf5 data file
-
-        looks in indicated data directory and registers/motion corrects images found in there
-        optional to define
-        """
-        print('No registration function defined for this plugin')
 
     ###########################################################################
     # Shared methods - may overwrite these in child class
@@ -119,25 +100,6 @@ class BasePlugin():
                         new_key = '{}:{}:{}'.format(fly_id, sn, roi_name)
                         all_roiset_paths[new_key] = new_path
         return all_roiset_paths
-
-    def registerStack(self, image_series, time_points):
-        """
-        """
-
-        reference_time_frame = 1  # sec, first frames to use as reference for registration
-        reference_frame = np.where(time_points > reference_time_frame)[0][0]
-
-        reference_image = np.squeeze(np.mean(image_series[0:reference_frame, :, :], axis=0))
-        register = CrossCorr()
-        model = register.fit(image_series, reference=reference_image)
-
-        registered_series = model.transform(image_series)
-        if len(registered_series.shape) == 3:  # xyt
-            registered_series = registered_series.toseries().toarray().transpose(2, 0, 1)  # shape t, y, x
-        elif len(registered_series.shape) == 4:  # xyzt
-            registered_series = registered_series.toseries().toarray().transpose(3, 0, 1, 2)  # shape t, z, y, x
-
-        return registered_series
 
     # ROI METHODS:
     def saveRoiSet(self, file_path, series_number,
@@ -342,3 +304,21 @@ def getAvailableRoiSetNames(file_path, series_number):
         epoch_run_group = experiment_file.visititems(find_partial)
         rois_group = epoch_run_group.get('rois')
         return list(rois_group.keys())
+
+
+def attachImageFileName(file_path, series_number, image_file_name):
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        acquisition_group = epoch_run_group.require_group('acquisition')
+        acquisition_group.attrs['image_file_name'] = image_file_name
+
+
+def readImageFileName(file_path, series_number):
+    with h5py.File(file_path, 'r') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        acquisition_group = epoch_run_group.require_group('acquisition')
+        image_file_name = acquisition_group.attrs.get('image_file_name')
+
+    return image_file_name

@@ -41,6 +41,8 @@ class DataGUI(QWidget):
 
         self.current_roi_index = 0
         self.current_z_slice = 0
+        self.current_channel = 1 # index
+        self.image_series_name = ''
         self.series_number = None
         self.roi_response = []
         self.roi_mask = []
@@ -49,9 +51,9 @@ class DataGUI(QWidget):
         self.roi_path_list = []
         self.roi_z_list =[]
 
-        self.blank_image = np.zeros((1,1))
+        self.blank_image = np.zeros((1, 1))
 
-        self.colors = sns.color_palette("deep", n_colors = 20)
+        self.colors = sns.color_palette("deep", n_colors=20)
 
         self.initUI()
 
@@ -97,12 +99,10 @@ class DataGUI(QWidget):
         self.data_directory_display.setFont(QtGui.QFont('SansSerif', 8))
         self.file_control_grid.addWidget(self.data_directory_display, 1, 1)
 
-        registerButton = QPushButton("Register image series", self)
-        registerButton.clicked.connect(self.registerStacks)
-        self.file_control_grid.addWidget(registerButton, 2, 0)
-        attachDatabutton = QPushButton("Attach data to file", self)
+        # Attach metadata to file
+        attachDatabutton = QPushButton("Attach metadata to file", self)
         attachDatabutton.clicked.connect(self.attachData)
-        self.file_control_grid.addWidget(attachDatabutton, 2, 1)
+        self.file_control_grid.addWidget(attachDatabutton, 2, 0, 1, 2)
 
         # # # # File tree: # # # # # # # #  (1,0)
         self.groupTree = QTreeWidget(self)
@@ -114,6 +114,20 @@ class DataGUI(QWidget):
         deleteGroupButton = QPushButton("Delete selected group", self)
         deleteGroupButton.clicked.connect(self.deleteSelectedGroup)
         self.group_control_grid.addWidget(deleteGroupButton, 0, 0, 1, 2)
+
+        # File name display
+        self.currentImageFileNameLabel = QLabel('')
+        self.group_control_grid.addWidget(self.currentImageFileNameLabel, 1, 0)
+
+
+        # Channel drop down
+        ch_label = QLabel('Channel:')
+        self.ChannelComboBox = QComboBox(self)
+        self.ChannelComboBox.addItem("1")
+        self.ChannelComboBox.addItem("0")
+        self.ChannelComboBox.activated.connect(self.selectChannel)
+        self.group_control_grid.addWidget(ch_label, 2, 0)
+        self.group_control_grid.addWidget(self.ChannelComboBox, 2, 1)
 
         # # # # Attribute table: # # # # # # # # (1, 1)
         self.tableAttributes = QTableWidget()
@@ -203,7 +217,11 @@ class DataGUI(QWidget):
         self.roiSlider.valueChanged.connect(self.sliderUpdated)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 1)
 
-        plt.rc_context({'axes.edgecolor':'white', 'xtick.color':'white', 'ytick.color':'white', 'figure.facecolor':'black', 'axes.facecolor':'black'})
+        plt.rc_context({'axes.edgecolor': 'white',
+                        'xtick.color': 'white',
+                        'ytick.color': 'white',
+                        'figure.facecolor': 'black',
+                        'axes.facecolor': 'black'})
         self.responseFig = plt.figure()
         self.responsePlot = self.responseFig.add_subplot(111)
         self.responseFig.subplots_adjust(left=0.05, bottom=0.20, top=0.95, right=0.98)
@@ -279,6 +297,19 @@ class DataGUI(QWidget):
                 if not self.plugin.volume_analysis:
                     self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # print('selected series {}'.format(self.series_number))
+            # look for image_file_name or ask user to select it
+            image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
+            if image_file_name is None:
+                image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
+                print('User selected image file at {}'.format(image_file_path))
+                image_file_name = os.path.split(image_file_path)[-1]
+                self.data_directory = os.path.split(image_file_path)[:-1][0]
+                plugin.base.attachImageFileName(file_path, self.series_number, image_file_name)
+                print('Attached image_file_name {} to series {}'.format(image_file_name, self.series_number))
+                print('Data directory is {}'.format(self.data_directory))
+
+            self.image_file_name = image_file_name
+            self.currentImageFileNameLabel.setText(self.image_file_name)
 
         if item.parent() is not None:
             if item.parent().text(column) == 'rois': # selected existing roi group
@@ -295,18 +326,16 @@ class DataGUI(QWidget):
                 editable_values = False  # don't let user edit epoch parameters
             else:
                 editable_values = True
-            self.populate_attrs(attr_dict = attr_dict, editable_values = editable_values)
+            self.populate_attrs(attr_dict=attr_dict, editable_values=editable_values)
 
         # show roi image
         if self.series_number is not None:
             if self.data_directory is not None:  # user has selected a raw data directory
-                kwargs = {'data_directory': self.data_directory,
-                          'series_number': self.series_number,
-                          'experiment_file_name': self.experiment_file_name,
-                          'file_path': file_path,
-                          'pmt': 1,
-                          'z_slice': self.current_z_slice}
-                self.roi_image = self.plugin.getRoiImage(**kwargs)
+                self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
+                                                         image_file_name=self.image_file_name,
+                                                         series_number=self.series_number,
+                                                         channel=self.current_channel,
+                                                         z_slice=self.current_z_slice)
                 if len(self.roi_image) > 0:
                     if self.plugin.volume_analysis:
                         self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
@@ -337,11 +366,7 @@ class DataGUI(QWidget):
         if self.series_number is not None:
             self.roi_response = []
             for path in self.roi_path:
-                new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=path,
-                                                              data_directory=self.data_directory,
-                                                              series_number=self.series_number,
-                                                              experiment_file_name=self.experiment_file_name,
-                                                              experiment_file_path=file_path)
+                new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=path)
                 self.roi_response.append(new_roi_resp)
 
             # update slider to show most recently drawn roi response
@@ -353,7 +378,7 @@ class DataGUI(QWidget):
 
 
     def selectDataFile(self):
-        filePath, _ = QFileDialog.getOpenFileName(self, "Open file")
+        filePath, _ = QFileDialog.getOpenFileName(self, "Open experiment (hdf5) file")
         self.experiment_file_name = os.path.split(filePath)[1].split('.')[0]
         self.experiment_file_directory = os.path.split(filePath)[0]
 
@@ -364,7 +389,7 @@ class DataGUI(QWidget):
             self.updateExistingRoiSetList()
 
     def selectDataDirectory(self):
-        filePath = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        filePath = str(QFileDialog.getExistingDirectory(self, "Select data directory"))
         self.data_directory = filePath
         self.data_directory_display.setText('..' + self.data_directory[-24:])
 
@@ -381,14 +406,6 @@ class DataGUI(QWidget):
 
         self.plugin.parent_gui = self
 
-    def registerStacks(self):
-        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.registerStacksThread = registerStacksThread(plugin=self.plugin,
-                                                         experiment_file_name=self.experiment_file_name,
-                                                         file_path=file_path,
-                                                         data_directory=self.data_directory)
-
-        self.registerStacksThread.start()
 
     def attachData(self):
         if self.data_directory is not None:
@@ -397,6 +414,10 @@ class DataGUI(QWidget):
             print('Data attached')
         else:
             print('Select a data directory before attaching new data')
+
+    def assignImageFileName(self):
+        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
+        self.plugin.attachImageFileName(file_path, series_number, image_file_name)
 
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -523,18 +544,13 @@ class DataGUI(QWidget):
             radiusX = self.roi_radius
 
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
-        new_roi_path = path.Path.circle(center = center, radius = radiusX)
+        new_roi_path = path.Path.circle(center=center, radius=radiusX)
         new_roi_path.z_level = self.zSlider.value()
         self.updateRoiSelection([new_roi_path])
 
     def updateRoiSelection(self, new_roi_path):
-        file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        mask = self.plugin.getRoiMaskFromPath(new_roi_path, self.data_directory, self.series_number, self.experiment_file_name, file_path)
-        new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path,
-                                                      data_directory=self.data_directory,
-                                                      series_number=self.series_number,
-                                                      experiment_file_name=self.experiment_file_name,
-                                                      experiment_file_path=file_path)
+        mask = self.plugin.getRoiMaskFromPath(new_roi_path)
+        new_roi_resp = self.plugin.getRoiDataFromPath(roi_path=new_roi_path)
         if new_roi_resp is None:
             print('No pixels in selected roi')
             return
@@ -555,12 +571,11 @@ class DataGUI(QWidget):
 
     def zSliderUpdated(self):
         self.current_z_slice = self.zSlider.value()
-        kwargs = {'data_directory': self.data_directory,
-                  'series_number': self.series_number,
-                  'experiment_file_name': self.experiment_file_name,
-                  'pmt': 1,
-                  'z_slice': self.current_z_slice}
-        self.roi_image = self.plugin.getRoiImage(**kwargs)
+        self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
+                                                 image_file_name=self.image_file_name,
+                                                 series_number=self.series_number,
+                                                 channel=self.current_channel,
+                                                 z_slice=self.current_z_slice)
         if self.roi_image is not None:
             self.redrawRoiTraces()
         pass
@@ -592,12 +607,12 @@ class DataGUI(QWidget):
                                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if buttonReply == QMessageBox.Yes:
                 self.plugin.saveRoiSet(file_path,
-                               series_number=self.series_number,
-                               roi_set_name=roi_set_name,
-                               roi_mask=self.roi_mask,
-                               roi_response=self.roi_response,
-                               roi_image=self.roi_image,
-                               roi_path=self.roi_path)
+                                       series_number=self.series_number,
+                                       roi_set_name=roi_set_name,
+                                       roi_mask=self.roi_mask,
+                                       roi_response=self.roi_response,
+                                       roi_image=self.roi_image,
+                                       roi_path=self.roi_path)
                 print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
                 self.populateGroups()
                 self.updateExistingRoiSetList()
@@ -605,12 +620,12 @@ class DataGUI(QWidget):
                 print('Overwrite aborted - pick a unique roi set name')
         else:
             self.plugin.saveRoiSet(file_path,
-                           series_number=self.series_number,
-                           roi_set_name=roi_set_name,
-                           roi_mask=self.roi_mask,
-                           roi_response=self.roi_response,
-                           roi_image=self.roi_image,
-                           roi_path=self.roi_path)
+                                   series_number=self.series_number,
+                                   roi_set_name=roi_set_name,
+                                   roi_mask=self.roi_mask,
+                                   roi_response=self.roi_response,
+                                   roi_image=self.roi_image,
+                                   roi_path=self.roi_path)
             print('Saved roi set {} to series {}'.format(roi_set_name, self.series_number))
             self.populateGroups()
             self.updateExistingRoiSetList()
@@ -640,25 +655,8 @@ class DataGUI(QWidget):
             self.roi_radius = None
         self.redrawRoiTraces()
 
-
-class registerStacksThread(QThread):
-    # https://nikolak.com/pyqt-threading-tutorial/
-    # https://stackoverflow.com/questions/41848769/pyqt5-object-has-no-attribute-connect
-    def __init__(self, plugin, experiment_file_name, file_path, data_directory):
-        QThread.__init__(self)
-        self.plugin = plugin
-        self.experiment_file_name = experiment_file_name
-        self.file_path = file_path
-        self.data_directory = data_directory
-
-    def __del__(self):
-        self.wait()
-
-    def _startReg(self):
-        self.plugin.registerAndSaveStacks(self.experiment_file_name, self.file_path, self.data_directory)
-
-    def run(self):
-        self._startReg()
+    def selectChannel(self):
+        self.current_channel = int(self.ChannelComboBox.currentText())
 
 
 if __name__ == '__main__':
