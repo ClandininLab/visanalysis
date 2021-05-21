@@ -278,16 +278,18 @@ class ImagingDataObject():
         stimulus_end_times = self.stimulus_timing['stimulus_end_times']  # sec
 
         pre_time = self.run_parameters['pre_time']  # sec
+        stim_time = self.run_parameters['stim_time']  # sec
         tail_time = self.run_parameters['tail_time']  # sec
         epoch_start_times = stimulus_start_times - pre_time
         epoch_end_times = stimulus_end_times + tail_time
+        epoch_time = 0.95*(pre_time + stim_time + tail_time) # sec
 
         sample_period = self.response_timing['sample_period']  # sec
         stack_times = self.response_timing['time_vector']  # sec
 
         # Use measured stimulus lengths for stim time instead of epoch param
         # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
-        epoch_time = 0.99 * np.mean(epoch_end_times - epoch_start_times)  # sec
+        # epoch_time = 0.98 * np.mean(epoch_end_times - epoch_start_times)  # sec
 
         # find how many acquisition frames correspond to pre, stim, tail time
         epoch_frames = int(epoch_time / sample_period)  # in acquisition frames
@@ -302,12 +304,12 @@ class ImagingDataObject():
         for idx, val in enumerate(epoch_start_times):
             stack_inds = np.where(np.logical_and(stack_times < epoch_end_times[idx], stack_times >= epoch_start_times[idx]))[0]
             if len(stack_inds) == 0:  # no imaging acquisitions happened during this epoch presentation
-                cut_inds = np.append(cut_inds,idx)
+                cut_inds = np.append(cut_inds, idx)
                 continue
             if np.any(stack_inds > response_trace.shape[1]):
                 cut_inds = np.append(cut_inds, idx)
                 continue
-            if idx != 0:
+            if idx == no_trials:
                 if len(stack_inds) < epoch_frames:  # missed images for the end of the stimulus
                     cut_inds = np.append(cut_inds, idx)
                     print('Missed acquisition frames at the end of the stimulus!')
@@ -321,7 +323,13 @@ class ImagingDataObject():
                 # to dF/F
                 new_resp_chunk = (new_resp_chunk - baseline) / baseline
 
-            response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
+            try:
+                response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
+            except:
+                print('Size mismatch idx = {}'.format(idx)) # the end of a response clipped off
+                cut_inds = np.append(cut_inds, idx)
+
+            # response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
 
         if len(cut_inds) > 0:
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
@@ -337,7 +345,7 @@ class ImagingDataObject():
         ax.set_aspect('equal')
         ax.set_axis_off()
         if scale_bar_length > 0:
-            microns_per_pixel = float(self.metadata['micronsPerPixel_XAxis'])
+            microns_per_pixel = float(self.acquisition_metadata['micronsPerPixel_XAxis'])
             plot_tools.addImageScaleBar(ax, newImage, scale_bar_length, microns_per_pixel, 'lr')
 
 

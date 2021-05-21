@@ -13,7 +13,7 @@ import skimage.io as io
 from tifffile import imsave
 import functools
 import nibabel as nib
-from PyQt5.QtWidgets import QFileDialog
+# from PyQt5.QtWidgets import QFileDialog
 from PyQt5 import Qt
 
 from visanalysis import plugin
@@ -179,7 +179,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
         else:
             print('File not found at: {} or {}, select file manually'.format(tif_file_path, nii_file_path))
-            filePath, _ = QFileDialog.getOpenFileName(self.parent_gui, "Open image file")
+            # filePath, _ = QFileDialog.getOpenFileName(self.parent_gui, "Open image file")
             print('User selected image file at {}'.format(filePath))
             suffix = filePath.split('.')[-1]
             if suffix == 'tif':
