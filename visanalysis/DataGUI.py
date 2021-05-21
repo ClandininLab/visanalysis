@@ -305,7 +305,7 @@ class DataGUI(QWidget):
             # print('selected series {}'.format(self.series_number))
             # look for image_file_name or ask user to select it
             image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
-            if image_file_name is None:
+            if image_file_name is None or image_file_name == '':
                 image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
                 print('User selected image file at {}'.format(image_file_path))
                 image_file_name = os.path.split(image_file_path)[-1]
