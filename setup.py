@@ -14,7 +14,6 @@ setup(
         'scipy',
         'pandas',
         'scikit-image',
-        'thunder-registration',
         'seaborn',
         'pyyaml',
         'matplotlib',

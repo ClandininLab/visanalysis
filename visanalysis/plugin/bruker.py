@@ -260,7 +260,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
         sample_rate = int(rate_node.text)
 
         active_channels = []
-        signal_list = root.find('Experiment').find('SignalList').getchildren()
+        signal_list = list(root.find('Experiment').find('SignalList'))
         for signal_node in signal_list:
             is_channel_active = signal_node.find('Enabled').text
             channel_name = signal_node.find('Name').text
