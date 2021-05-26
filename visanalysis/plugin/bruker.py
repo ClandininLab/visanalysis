@@ -119,7 +119,6 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 if 'frame_times' in response_timing:
                     plugin.base.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
                 acquisition_group.attrs['sample_period'] = response_timing['sample_period']
-
                 for key in metadata:
                     acquisition_group.attrs[key] = metadata[key]
 
@@ -240,7 +239,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             t_dim = len(sequences)
             z_dim = len(sequences[0].findall('Frame'))
 
-        metadata['image_dims'] = [x_dim, y_dim, z_dim, t_dim, c_dim]
+        metadata['image_dims'] = [int(x_dim), int(y_dim), z_dim, t_dim, c_dim]
 
         metadata['version'] = root.get('version')
         metadata['date'] = root.get('date')
