@@ -11,8 +11,46 @@ import os
 import datetime
 import inspect
 import yaml
+from matplotlib.patches import Rectangle, Circle, Arrow
+
 
 import visanalysis
+
+
+def addStimulusDrawing(ax, stimulus, params):
+    bounds = params.get('bounds', [-30, 30, -30, 30])
+    center = params.get('center', (0, 0))
+
+    if stimulus == 'MovingRectangle':
+        width = params.get('width', 1)
+        height = params.get('height', 2)
+        color = params.get('color', [0, 0, 0])
+        direction = params.get('direction', 0)
+        arrow_len = 1.2*width
+
+        ax.add_patch(Rectangle((center[0] - width/2, center[1] - height/2), width, height, facecolor=color))
+        ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
+
+    elif stimulus == 'ExpandingMovingSpot':
+        radius = params.get('radius', 1)
+        color = params.get('color', [0, 0, 0])
+        direction = params.get('direction', 0)
+        arrow_len = 1.2*radius
+
+        ax.add_patch(Circle(center, radius, facecolor=color))
+        ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
+
+    ax.set_axis_on()
+    ax.set_facecolor([0.5, 0.5, 0.5])
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlim([bounds[0], bounds[1]])
+    ax.set_ylim([bounds[2], bounds[3]])
+    ax.set_aspect('equal')
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
 
 
 def addLine(ax, x, y, line_name='', color='k', linestyle='-', marker='None'):

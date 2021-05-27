@@ -18,7 +18,8 @@ setup(
         'pyyaml',
         'matplotlib',
         'npTDMS',
-        'nibabel'],
+        'nibabel',
+        'psutil'],
     include_package_data=True,
     zip_safe=False,
 )
