@@ -349,6 +349,8 @@ class DataGUI(QWidget):
                         self.zSlider.setMaximum(0)
                     self.redrawRoiTraces()
 
+                    self.zSlider.setValue(0)
+
             else:
                 print('Select a data directory before drawing rois')
 
