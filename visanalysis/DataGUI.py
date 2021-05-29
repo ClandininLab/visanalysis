@@ -300,9 +300,7 @@ class DataGUI(QWidget):
         if 'series_' in group_path:
             self.series_number = int(group_path.split('series_')[-1].split('/')[0])
             if self.plugin.dataIsAttached(file_path, self.series_number):
-                if not self.plugin.volume_analysis:
-                    self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
-            # print('selected series {}'.format(self.series_number))
+                self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # look for image_file_name or ask user to select it
             image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
             if image_file_name is None or image_file_name == '':
@@ -356,7 +354,7 @@ class DataGUI(QWidget):
 
         # # # TEST # # #
         memory_usage = psutil.Process(os.getpid()).memory_info().rss*10**-9
-        print('Current memory usage: {:.2f}GB'.format(memory_usage))
+        print('Current Memory Usage: {:.2f}GB'.format(memory_usage))
         sys.stdout.flush()
         # # # TEST # # #
 
@@ -622,7 +620,7 @@ class DataGUI(QWidget):
                                                  z_slice=self.current_z_slice)
         if self.roi_image is not None:
             self.redrawRoiTraces()
-        pass
+
 
     def redrawRoiTraces(self):
         self.responsePlot.clear()

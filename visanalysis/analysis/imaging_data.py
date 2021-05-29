@@ -41,8 +41,6 @@ class ImagingDataObject():
         # Retrieve:
         self.getFlyMetadata()
         self.getAcquisitionMetadata()
-        # Retrieve: photodiode_trace, photodiode_time_vector, photodiode_sample_rate
-        self.getPhotodiodeData()
         # Retrieve: response_timing
         self.getResponseTiming()
         # Calculate stimulus_timing
@@ -93,11 +91,13 @@ class ImagingDataObject():
             epoch_run_group = experiment_file.visititems(find_partial)
             stimulus_timing_group = epoch_run_group['stimulus_timing']
 
-            self.photodiode_trace = stimulus_timing_group.get('frame_monitor')[:]
-            if len(self.photodiode_trace.shape) < 2:
-                self.photodiode_trace = self.photodiode_trace[np.newaxis, :] # dummy dim for single channel photodiode
-            self.photodiode_time_vector = stimulus_timing_group.get('time_vector')[:]
-            self.photodiode_sample_rate = stimulus_timing_group.attrs['sample_rate']
+            photodiode_trace = stimulus_timing_group.get('frame_monitor')[:]
+            if len(photodiode_trace.shape) < 2:
+                photodiode_trace = photodiode_trace[np.newaxis, :] # dummy dim for single channel photodiode
+            photodiode_time_vector = stimulus_timing_group.get('time_vector')[:]
+            photodiode_sample_rate = stimulus_timing_group.attrs['sample_rate']
+
+        return photodiode_trace, photodiode_time_vector, photodiode_sample_rate
 
     def getResponseTiming(self):
         with h5py.File(self.file_path, 'r') as experiment_file:
@@ -118,11 +118,10 @@ class ImagingDataObject():
             returns stimulus timing information based on photodiode voltage trace from alternating frame tracker signal
 
         """
-        frame_monitor_channels = self.photodiode_trace.copy()
+        frame_monitor_channels, time_vector, sample_rate = self.getPhotodiodeData()
+
         if len(frame_monitor_channels.shape) == 1:
             frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
-        time_vector = self.photodiode_time_vector.copy()
-        sample_rate = self.photodiode_sample_rate.copy()
 
         minimum_epoch_separation = 0.9 * (self.run_parameters['pre_time'] + self.run_parameters['tail_time']) * sample_rate
 
@@ -220,7 +219,7 @@ class ImagingDataObject():
                 print('==========================================================')
 
         # for stimulus_timing just use one of the channels, both *should* be in sync
-        self.stimulus_timing = {'frame_times': frame_times,
+        self.stimulus_timing = {
                                 'stimulus_end_times': stimulus_end_times,
                                 'stimulus_start_times': stimulus_start_times,
                                 'dropped_frame_times': dropped_frame_times,
