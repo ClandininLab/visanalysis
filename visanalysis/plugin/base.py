@@ -20,7 +20,6 @@ import os
 class BasePlugin():
     def __init__(self):
         super().__init__()
-        self.volume_analysis = False
         self.ImagingDataObject = None
 
     ###########################################################################
@@ -136,32 +135,7 @@ class BasePlugin():
                     current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
                     plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
                     current_roi_path_group.attrs['z_level'] = p.z_level
-
-    def loadRoiGeometry(self, file_path, roi_set_path):
-        def find_roi_path(name, obj):
-            if 'roipath' in name:
-                return obj
-
-        def find_roi_subpath(name, obj):
-            if 'subpath' in name:
-                return obj
-
-        with h5py.File(file_path, 'r') as experiment_file:
-            roi_set_group = experiment_file[roi_set_path]
-            roi_mask = list(roi_set_group.get("roi_mask")[:])
-
-            roi_path = []
-            for roipath_key, roipath_group in roi_set_group.items():
-                if isinstance(roipath_group, h5py._hl.group.Group):
-                    subpaths = []
-                    for roi_subpath_group in roipath_group.values():
-                        if isinstance(roi_subpath_group, h5py._hl.group.Group):
-                            new_path = path.Path(roi_subpath_group.get("path_vertices")[:])
-                            new_path.z_level = roi_subpath_group.attrs.get('z_level', 0)
-                            subpaths.append(new_path)
-                    roi_path.append(subpaths)  # list of list of paths
-
-        return roi_path, roi_mask
+                    current_roi_path_group.attrs['channel'] = p.channel
 
     def loadRoiSet(self, file_path, roi_set_path):
         def find_roi_path(name, obj):
@@ -177,6 +151,8 @@ class BasePlugin():
             roi_response = list(roi_set_group.get("roi_response")[:])
             roi_mask = list(roi_set_group.get("roi_mask")[:])
             roi_image = roi_set_group.get("roi_image")[:]
+            if len(roi_image.shape) <=2:
+                roi_image = roi_image[:, :, np.newaxis]
 
             roi_path = []
             for roipath_key, roipath_group in roi_set_group.items():
@@ -184,14 +160,11 @@ class BasePlugin():
                     subpaths = []
                     for roi_subpath_group in roipath_group.values():
                         if isinstance(roi_subpath_group, h5py._hl.group.Group):
-                            subpaths.append(roi_subpath_group.get("path_vertices")[:])
-                    subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
+                            new_subpath = path.Path(roi_subpath_group.get("path_vertices")[:])
+                            new_subpath.z_level = int(roi_subpath_group.attrs.get('z_level', 0))
+                            new_subpath.channel = int(roi_subpath_group.attrs.get('channel', 0))
+                            subpaths.append(new_subpath)
                     roi_path.append(subpaths)  # list of list of paths
-
-            if len(roi_image.shape) > 2:
-                self.volume_analysis = True
-            else:
-                self.volume_analysis = False
 
         return roi_response, roi_image, roi_path, roi_mask
 

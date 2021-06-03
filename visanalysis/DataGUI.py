@@ -49,7 +49,7 @@ class DataGUI(QWidget):
         self.roi_response = []
         self.roi_mask = []
         self.roi_path = []
-        self.roi_image = []
+        self.roi_image = None
         self.roi_path_list = []
         self.roi_z_list =[]
 
@@ -302,18 +302,19 @@ class DataGUI(QWidget):
             if self.plugin.dataIsAttached(file_path, self.series_number):
                 self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # look for image_file_name or ask user to select it
-            image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
-            if image_file_name is None or image_file_name == '':
-                image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
-                print('User selected image file at {}'.format(image_file_path))
-                image_file_name = os.path.split(image_file_path)[-1]
-                self.data_directory = os.path.split(image_file_path)[:-1][0]
-                plugin.base.attachImageFileName(file_path, self.series_number, image_file_name)
-                print('Attached image_file_name {} to series {}'.format(image_file_name, self.series_number))
-                print('Data directory is {}'.format(self.data_directory))
+            if self.data_directory is not None:
+                image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
+                if image_file_name is None or image_file_name == '':
+                    image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
+                    print('User selected image file at {}'.format(image_file_path))
+                    image_file_name = os.path.split(image_file_path)[-1]
+                    self.data_directory = os.path.split(image_file_path)[:-1][0]
+                    plugin.base.attachImageFileName(file_path, self.series_number, image_file_name)
+                    print('Attached image_file_name {} to series {}'.format(image_file_name, self.series_number))
+                    print('Data directory is {}'.format(self.data_directory))
 
-            self.image_file_name = image_file_name
-            self.currentImageFileNameLabel.setText(self.image_file_name)
+                self.image_file_name = image_file_name
+                self.currentImageFileNameLabel.setText(self.image_file_name)
 
         if item.parent() is not None:
             if item.parent().text(column) == 'rois': # selected existing roi group
@@ -335,19 +336,14 @@ class DataGUI(QWidget):
         # show roi image
         if self.series_number is not None:
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
-                                                         image_file_name=self.image_file_name,
-                                                         series_number=self.series_number,
-                                                         channel=self.current_channel,
-                                                         z_slice=self.current_z_slice)
-                if len(self.roi_image) > 0:
-                    if self.plugin.volume_analysis:
-                        self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
-                    else:
-                        self.zSlider.setMaximum(0)
-                    self.redrawRoiTraces()
-
-                    self.zSlider.setValue(0)
+                self.plugin.updateImageSeries(data_directory=self.data_directory,
+                                              image_file_name=self.image_file_name,
+                                              series_number=self.series_number,
+                                              channel=self.current_channel)
+                self.roi_image = self.plugin.mean_brain
+                self.zSlider.setValue(0)
+                self.zSlider.setMaximum(self.roi_image.shape[2]-1)
+                self.redrawRoiTraces()
 
             else:
                 print('Select a data directory before drawing rois')
@@ -373,7 +369,7 @@ class DataGUI(QWidget):
         roi_set_key = self.loadROIsComboBox.currentText()
         roi_set_path = self.existing_roi_set_paths[roi_set_key]
 
-        self.roi_path, self.roi_mask = self.plugin.loadRoiGeometry(file_path, roi_set_path)
+        _, _, self.roi_path, self.roi_mask = self.plugin.loadRoiSet(file_path, roi_set_path)
 
         if self.series_number is not None:
             self.roi_response = []
@@ -447,18 +443,14 @@ class DataGUI(QWidget):
         # show roi image
         if self.series_number is not None:
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
-                                                         image_file_name=self.image_file_name,
-                                                         series_number=self.series_number,
-                                                         channel=self.current_channel,
-                                                         z_slice=self.current_z_slice)
-                if len(self.roi_image) > 0:
-                    if self.plugin.volume_analysis:
-                        self.zSlider.setMaximum(self.plugin.current_series.shape[2]-1)
-                    else:
-                        self.zSlider.setMaximum(0)
-                    self.redrawRoiTraces()
-
+                self.plugin.updateImageSeries(data_directory=self.data_directory,
+                                              image_file_name=self.image_file_name,
+                                              series_number=self.series_number,
+                                              channel=self.current_channel)
+                self.roi_image = self.plugin.mean_brain
+                self.zSlider.setValue(0)
+                self.zSlider.setMaximum(self.roi_image.shape[2]-1)
+                self.redrawRoiTraces()
             else:
                 print('Select a data directory before drawing rois')
 
@@ -524,14 +516,14 @@ class DataGUI(QWidget):
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #
 
-    def refreshLassoWidget(self):
+    def refreshLassoWidget(self, keep_paths=False):
         self.roi_ax.clear()
         init_lasso = False
-        if len(self.roi_image) > 0:
+        if self.roi_image is not None:
             if len(self.roi_mask) > 0:
-                newImage = plot_tools.overlayImage(self.roi_image, self.roi_mask, 0.5, self.colors, z=self.current_z_slice)
+                newImage = plot_tools.overlayImage(self.roi_image[:, :, self.current_z_slice], self.roi_mask, 0.5, self.colors, z=self.current_z_slice)
             else:
-                newImage = self.roi_image
+                newImage = self.roi_image[:, :, self.current_z_slice]
             self.roi_ax.imshow(newImage, cmap=cm.gray)
             init_lasso = True
         else:
@@ -539,8 +531,10 @@ class DataGUI(QWidget):
 
         self.roi_canvas.draw()
 
-        self.roi_path_list = []
-        self.roi_z_list = []
+        if not keep_paths:
+            self.roi_path_list = []
+            self.roi_z_list = []
+
         if init_lasso:
             if self.roi_type == 'circle':
                 self.lasso_1 = EllipseSelector(self.roi_ax, onselect=self.newEllipse, button=1)
@@ -553,12 +547,14 @@ class DataGUI(QWidget):
     def newFreehand(self, verts):
         new_roi_path = path.Path(verts)
         new_roi_path.z_level = self.zSlider.value()
+        new_roi_path.channel = self.current_channel
         self.updateRoiSelection([new_roi_path])
 
     def appendFreehand(self, verts):
         print('Appending rois, hit Enter/Return to finish')
         new_roi_path = path.Path(verts)
         new_roi_path.z_level = self.zSlider.value()
+        new_roi_path.channel = self.current_channel
         self.roi_path_list.append(new_roi_path)
 
     def keyPressEvent(self, event):
@@ -588,6 +584,7 @@ class DataGUI(QWidget):
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         new_roi_path = path.Path.circle(center=center, radius=radiusX)
         new_roi_path.z_level = self.zSlider.value()
+        new_roi_path.channel = self.current_channel
         self.updateRoiSelection([new_roi_path])
 
     def updateRoiSelection(self, new_roi_path):
@@ -613,20 +610,8 @@ class DataGUI(QWidget):
 
     def zSliderUpdated(self):
         self.current_z_slice = self.zSlider.value()
-        if self.data_directory is not None:  # user has selected a raw data directory
-            self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
-                                                     image_file_name=self.image_file_name,
-                                                     series_number=self.series_number,
-                                                     channel=self.current_channel,
-                                                     z_slice=self.current_z_slice)
-        elif self.roi_image is not None:
-            self.redrawRoiTraces()
-
-        else:
-            print('Select a data directory before drawing rois')
-
         if self.roi_image is not None:
-            self.redrawRoiTraces()
+            self.refreshLassoWidget(keep_paths=True)
 
 
     def redrawRoiTraces(self):
@@ -638,18 +623,16 @@ class DataGUI(QWidget):
             self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
         self.responseCanvas.draw()
 
-        self.refreshLassoWidget()
+        self.refreshLassoWidget(keep_paths=False)
 
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
 
     def loadRois(self, roi_set_path):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         self.roi_response, self.roi_image, self.roi_path, self.roi_mask = self.plugin.loadRoiSet(file_path, roi_set_path)
+        self.zSlider.setValue(0)
+        self.zSlider.setMaximum(self.roi_image.shape[2]-1)
 
-        if self.plugin.volume_analysis:
-            self.zSlider.setMaximum(self.roi_image.shape[2]-1)
-        else:
-            self.zSlider.setMaximum(0)
 
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
@@ -696,7 +679,7 @@ class DataGUI(QWidget):
         self.roi_mask = []
         self.roi_response = []
         self.roi_path = []
-        self.roi_image = []
+        self.roi_image = None
         self.responsePlot.clear()
         self.redrawRoiTraces()
         self.roi_ax.clear()

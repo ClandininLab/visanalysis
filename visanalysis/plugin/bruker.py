@@ -20,8 +20,16 @@ class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
         self.current_series = None
+        self.mean_brain = None
         self.current_series_number = 0
-        self.volume_analysis = False
+
+    def updateImageSeries(self, data_directory, image_file_name, series_number, channel):
+        if series_number != self.current_series_number: # only re-load if selected new series
+            self.current_series_number = series_number
+            self.loadImageSeries(data_directory=data_directory,
+                                 image_file_name=image_file_name,
+                                 channel=channel)
+
 
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         if series_number != self.current_series_number:
@@ -130,24 +138,20 @@ class BrukerPlugin(plugin.base.BasePlugin):
             # native axes order is tyx: convert to xyzt, with z dummy axis
             image_series = io.imread(image_file_path)
             image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
-            self.volume_analysis = False
             print('Loaded xyt image series {}'.format(image_file_path))
         elif '.nii' in image_file_name:
             nib_brain = np.asanyarray(nib.load(image_file_path).dataobj)
             brain_dims = nib_brain.shape
             if len(brain_dims) == 3: # xyt
                 image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
-                self.volume_analysis = False
                 print('Loaded xyt image series {}'.format(image_file_path))
 
             elif len(brain_dims) == 4: # xyzt
                 image_series = nib_brain  # xyzt
-                self.volume_analysis = True
                 print('Loaded xyzt image series {}'.format(image_file_path))
 
             elif len(brain_dims) == 5: # xyztc
                 image_series = np.squeeze(nib_brain[:, :, :, :, channel])  # xyzt
-                self.volume_analysis = True
                 print('Loaded xyzt image series from xyztc {}: channel {}'.format(image_file_path, channel))
 
             else:
