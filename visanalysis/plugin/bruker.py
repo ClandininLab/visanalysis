@@ -16,7 +16,6 @@ import nibabel as nib
 
 from visanalysis import plugin
 
-
 class BrukerPlugin(plugin.base.BasePlugin):
     def __init__(self):
         super().__init__()
@@ -27,16 +26,17 @@ class BrukerPlugin(plugin.base.BasePlugin):
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         if series_number != self.current_series_number:
             self.current_series_number = series_number
-            self.current_series = self.loadImageSeries(data_directory=data_directory,
-                                                       image_file_name=image_file_name,
-                                                       channel=channel)
+            self.loadImageSeries(data_directory=data_directory,
+                                 image_file_name=image_file_name,
+                                 channel=channel)
         else:
             pass # don't need to re-load the entire series
 
         if self.current_series is None:  # No image file found
             roi_image = []
         else:
-            roi_image = np.mean(np.squeeze(self.current_series[:, :, int(z_slice), :]), axis=2)
+            roi_image = self.mean_brain[:, :, int(z_slice)]
+
         return roi_image
 
     def getRoiDataFromPath(self, roi_path):
@@ -153,7 +153,10 @@ class BrukerPlugin(plugin.base.BasePlugin):
             else:
                 print('Unrecognized image dimensions')
                 image_series = None
-        return image_series
+
+        self.current_series = image_series
+        self.mean_brain = np.mean(image_series, axis=3) # xyz
+
 
     # %%
     ###########################################################################

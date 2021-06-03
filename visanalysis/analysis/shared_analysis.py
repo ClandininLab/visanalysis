@@ -1,15 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
+Shared analysis tools for visanalysis
 
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
-
-import matplotlib.pyplot as plt
-import numpy as np
 import glob
 import h5py
-import os
-
+import numpy as np
+import matplotlib.pyplot as plt
 from visanalysis import plot_tools
 
 
@@ -43,20 +41,20 @@ def getTraceMatrixByStimulusParameter(response_matrix, parameter_values):
     return unique_parameter_values, mean_trace_matrix, sem_trace_matrix, individual_traces
 
 
-def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind=0 , fig_handle=None):
+def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind=0):
+    roi_data = ImagingData.getRoiResponses(roi_name)
+
     conditioned_param = []
-    for ep in ImagingData.epoch_parameters:
+    for ep in ImagingData.getEpochParameters():
         conditioned_param.append(ep[condition])
 
     parameter_values = np.array([conditioned_param]).T
-    unique_parameter_values, mean_trace_matrix, sem_trace_matrix, individual_traces = getTraceMatrixByStimulusParameter(ImagingData.roi[roi_name]['epoch_response'], parameter_values)
+    unique_parameter_values, mean_trace_matrix, sem_trace_matrix, individual_traces = getTraceMatrixByStimulusParameter(roi_data.get('epoch_response'), parameter_values)
 
     unique_params = np.unique(np.array(conditioned_param))
 
     # plot stuff
-    if fig_handle is None:
-        fig_handle = plt.figure(figsize=(10,2))
-
+    fig_handle = plt.figure(figsize=(10,2))
     grid = plt.GridSpec(1, len(unique_params), wspace=0.2, hspace=0.15)
     fig_axes = fig_handle.get_axes()
     ax_ind = 0
@@ -73,7 +71,7 @@ def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind=0 , fig_han
         else:
             new_ax = fig_handle.add_subplot(grid[0,ind_v])
 
-        new_ax.plot(ImagingData.roi[roi_name]['time_vector'], mean_trace_matrix[eg_ind,pull_ind,:].T)
+        new_ax.plot(roi_data.get('time_vector'), mean_trace_matrix[eg_ind,pull_ind,:].T)
         new_ax.set_ylim([plot_y_min, plot_y_max])
         new_ax.set_axis_off()
         new_ax.set_title(val)
@@ -82,42 +80,34 @@ def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind=0 , fig_han
     fig_handle.canvas.draw()
 
 
-def plotRoiResponses(ImagingData, roi_name, fig_handle = None):
-    if fig_handle is None:
-        fig_handle = plt.figure(figsize=(10,2))
-
+def plotRoiResponses(ImagingData, roi_name):
     plot_y_min = -0.5
     plot_y_max = 2
 
-    no_rois = ImagingData.roi.get(roi_name).get('epoch_response').shape[0]
-    cols = 1
-    rows = np.ceil(no_rois/cols)
-    fig_axes = fig_handle.get_axes()
-    ax_ind = 0
-    for roi in range(no_rois):
-        ax_ind += 1
-        if len(fig_axes) > 1:
-            new_ax = fig_axes[ax_ind]
-            new_ax.clear()
-        else:
-            new_ax = fig_handle.add_subplot(cols,rows,roi+1)
+    roi_data = ImagingData.getRoiResponses(roi_name)
 
-        no_trials = ImagingData.roi[roi_name]['epoch_response'][roi,:,:].shape[0]
-        time_vector = ImagingData.roi[roi_name]['time_vector']
-        current_mean = np.mean(ImagingData.roi[roi_name]['epoch_response'][roi,:,:], axis = 0)
-        current_std = np.std(ImagingData.roi[roi_name]['epoch_response'][roi,:,:], axis = 0)
+    fh, ax = plt.subplots(1, int(roi_data.get('epoch_response').shape[0]+1), figsize=(6, 2))
+
+    for r_ind in range(roi_data.get('epoch_response').shape[0]):
+        time_vector = roi_data.get('time_vector')
+        no_trials = roi_data.get('epoch_response')[r_ind, :, :].shape[0]
+        current_mean = np.mean(roi_data.get('epoch_response')[r_ind,:,:], axis=0)
+        current_std = np.std(roi_data.get('epoch_response')[r_ind,:,:], axis=0)
         current_sem = current_std / np.sqrt(no_trials)
 
-        new_ax.plot(time_vector, current_mean, 'k')
-        new_ax.fill_between(time_vector, current_mean - current_sem, current_mean + current_sem, alpha = 0.5)
-        new_ax.set_ylim([plot_y_min, plot_y_max])
-        new_ax.set_axis_off()
-        new_ax.set_title(int(roi))
+        ax[r_ind].plot(time_vector, current_mean, 'k')
+        ax[r_ind].fill_between(time_vector,
+                            current_mean - current_sem,
+                            current_mean + current_sem,
+                            alpha=0.5)
+        ax[r_ind].set_ylim([plot_y_min, plot_y_max])
+        ax[r_ind].set_axis_off()
+        ax[r_ind].set_title(int(r_ind))
 
-        if roi == 0: # scale bar
-            plot_tools.addScaleBars(new_ax, 1, 1, F_value = -0.1, T_value = -0.2)
+        if r_ind == 0: # scale bar
+            plot_tools.addScaleBars(ax[r_ind], 1, 1, F_value = -0.1, T_value = -0.2)
 
-    fig_handle.canvas.draw()
+    fh.canvas.draw()
 
 def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metadata={}):
     """
