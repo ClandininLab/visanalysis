@@ -613,11 +613,18 @@ class DataGUI(QWidget):
 
     def zSliderUpdated(self):
         self.current_z_slice = self.zSlider.value()
-        self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
-                                                 image_file_name=self.image_file_name,
-                                                 series_number=self.series_number,
-                                                 channel=self.current_channel,
-                                                 z_slice=self.current_z_slice)
+        if self.data_directory is not None:  # user has selected a raw data directory
+            self.roi_image = self.plugin.getRoiImage(data_directory=self.data_directory,
+                                                     image_file_name=self.image_file_name,
+                                                     series_number=self.series_number,
+                                                     channel=self.current_channel,
+                                                     z_slice=self.current_z_slice)
+        elif self.roi_image is not None:
+            self.redrawRoiTraces()
+
+        else:
+            print('Select a data directory before drawing rois')
+
         if self.roi_image is not None:
             self.redrawRoiTraces()
 
@@ -638,6 +645,11 @@ class DataGUI(QWidget):
     def loadRois(self, roi_set_path):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         self.roi_response, self.roi_image, self.roi_path, self.roi_mask = self.plugin.loadRoiSet(file_path, roi_set_path)
+
+        if self.plugin.volume_analysis:
+            self.zSlider.setMaximum(self.roi_image.shape[2]-1)
+        else:
+            self.zSlider.setMaximum(0)
 
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')

@@ -14,6 +14,7 @@ import functools
 from visanalysis import plugin
 from visanalysis.analysis import imaging_data
 from matplotlib import path
+import os
 
 
 class BasePlugin():
@@ -187,10 +188,16 @@ class BasePlugin():
                     subpaths = [path.Path(x) for x in subpaths]  # convert from verts to path object
                     roi_path.append(subpaths)  # list of list of paths
 
+            if len(roi_image.shape) > 2:
+                self.volume_analysis = True
+            else:
+                self.volume_analysis = False
+
         return roi_response, roi_image, roi_path, roi_mask
 
     def updateImagingDataObject(self, experiment_file_directory, experiment_file_name, series_number):
-        self.ImagingDataObject = imaging_data.ImagingDataObject(experiment_file_directory, experiment_file_name, series_number)
+        file_path = os.path.join(experiment_file_directory, experiment_file_name + '.hdf5')
+        self.ImagingDataObject = imaging_data.ImagingDataObject(file_path, series_number, quiet=True)
 
     # roi display computation functions
     def getRoiResponse_TrialAverage(self, roi_response):
