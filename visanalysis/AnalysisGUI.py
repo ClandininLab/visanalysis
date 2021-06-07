@@ -217,7 +217,7 @@ class DataGUI(QWidget):
             #check if image metadata exists
             metadata_fp = self.image_filepath.split('.')[0] + '.xml'
             if os.path.exists(metadata_fp):
-                self.image_metadata = vr.getBrukerMetaData(metadata_fp)
+                self.image_metadata = vr.getBrukerMetaData(metadata_fp, get_frame_times=True)
                 print('Loaded image metadata from {}'.format(metadata_fp))
             else:
                 self.image_metadata = None
@@ -421,7 +421,8 @@ class DataGUI(QWidget):
             current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
             fxn_name = self.roi_response_type_combobox.currentText()
             display_trace = getattr(self, 'getRoiResponse_{}'.format(fxn_name))([current_raw_trace])
-            self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
+            # self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
+            self.responsePlot.plot(display_trace, linewidth=1, alpha=0.5)
         self.responseCanvas.draw()
 
         self.refreshLassoWidget(keep_paths=False)
@@ -442,13 +443,15 @@ class DataGUI(QWidget):
 
             # onset_frames
             frame_period = float(self.image_metadata.get('framePeriod')) * 1e3 # sec -> msec
-            frame_times = np.arange(0, self.image_series.shape[3]) * frame_period # msec
+            frame_times = np.array(self.image_metadata.get('frame_times')) * 1e3 # sec -> msec
 
             start_frames = [np.where(frame_times > onset)[0][0] for onset in zap_onsets]
             zap_duration = int(np.ceil(Duration / frame_period)) # imaging frames
 
-            frames_to_pull = (InterPointDelay + Duration) / frame_period # imaging frames
-            pre_frames = InitialDelay / frame_period
+            frames_to_pull = InterPointDelay / frame_period # imaging frames
+            pre_frames = np.floor(InitialDelay / frame_period)
+
+
             traces = []
             for start_frame in start_frames:
                 new_trace = roi_response[0][int(start_frame - pre_frames):int(start_frame + frames_to_pull)]

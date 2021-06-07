@@ -39,16 +39,16 @@ def getMarkPointsMetaData(file_path):
 
     return metadata
 
-def getBrukerMetaData(file_path):
+def getBrukerMetaData(file_path, get_frame_times=False):
     """
     Parse Bruker / PrairieView metadata from .xml file.
 
     file_path: .xml filepath
+    get_frame_times: bool, return frame timestamps from metadata as well
     returns
         metadata: dict
     """
-    metaData = ET.parse(file_path)
-    root = metaData.getroot()
+    root = ET.parse(file_path).getroot()
 
     metadata = {}
     for child in list(root.find('PVStateShard')):
@@ -66,6 +66,16 @@ def getBrukerMetaData(file_path):
     metadata['version'] = root.get('version')
     metadata['date'] = root.get('date')
     metadata['notes'] = root.get('notes')
+
+    if get_frame_times:
+        if root.find('Sequence').get('type') == 'TSeries Timed Element': # Plane time series
+            frame_times = [float(fr.get('relativeTime')) for fr in root.find('Sequence').findall('Frame')]
+
+        elif root.find('Sequence').get('type') == 'TSeries ZSeries Element': # Volume time series
+            middle_frame = int(len(root.find('Sequence').findall('Frame')) / 2)
+            frame_times = [float(seq.findall('Frame')[middle_frame].get('relativeTime')) for seq in root.findall('Sequence')]
+
+        metadata['frame_times'] = frame_times
 
     return metadata
 
