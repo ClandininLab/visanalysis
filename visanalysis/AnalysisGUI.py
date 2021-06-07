@@ -15,9 +15,7 @@ import seaborn as sns
 from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
-                             QApplication, QComboBox, QLineEdit, QFileDialog,
-                             QTableWidget, QTableWidgetItem, QSlider,
-                             QMessageBox, QTreeWidget, QTreeWidgetItem)
+                             QApplication, QComboBox, QLineEdit, QFileDialog, QSlider)
 import PyQt5.QtCore as QtCore
 import PyQt5.QtGui as QtGui
 import numpy as np
