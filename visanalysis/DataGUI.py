@@ -51,7 +51,6 @@ class DataGUI(QWidget):
         self.roi_path = []
         self.roi_image = None
         self.roi_path_list = []
-        self.roi_z_list =[]
 
         self.blank_image = np.zeros((1, 1))
 
@@ -533,7 +532,6 @@ class DataGUI(QWidget):
 
         if not keep_paths:
             self.roi_path_list = []
-            self.roi_z_list = []
 
         if init_lasso:
             if self.roi_type == 'circle':
