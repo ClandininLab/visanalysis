@@ -35,7 +35,7 @@ def getMarkPointsMetaData(file_path):
     points = list(galvo_element)
     for point_ind, point in enumerate(points):
         for key in point.keys():
-            metadata['point_{}_{}'.format(point_ind, key)] = point.get(key)
+            metadata['Point_{}_{}'.format(point_ind+1, key)] = point.get(key)
 
     return metadata
 

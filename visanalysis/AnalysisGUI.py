@@ -23,6 +23,7 @@ import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 import nibabel as nib
+import visanalysis.volume_registration as vr
 
 from visanalysis import plot_tools, plugin
 
@@ -44,9 +45,12 @@ class DataGUI(QWidget):
         self.roi_filename = ''
         self.roi_filepath = ''
 
-        self.current_channel = 1 # index
+        self.markpoints_metadata = None
+        self.image_metadata = None
 
-        self.current_image_series = None
+        self.channel = 1 # index
+
+        self.image_series = None
         self.roi_image = None
 
         self.current_roi_index = 0
@@ -125,6 +129,7 @@ class DataGUI(QWidget):
         self.roi_response_type_combobox = QComboBox(self)
 
         self.roi_response_type_combobox.addItem("RawTrace")
+        self.roi_response_type_combobox.addItem("ZapResponse")
         self.roi_control_grid.addWidget(self.roi_response_type_combobox, 2, 2)
 
         # ROIset file name line edit box
@@ -201,8 +206,26 @@ class DataGUI(QWidget):
 
         if self.image_filename != '':
             self.image_filename_label.setText(self.image_filename)
-            self.loadImage(self.image_filepath, self.current_channel)
+            self.loadImage(self.image_filepath, self.channel)
+
+            #check if mark points metadata exists
+            markpoints_fp = self.image_filepath.split('.')[0] + '_Cycle00001_MarkPoints.xml'
+            if os.path.exists(markpoints_fp):
+                self.markpoints_metadata = vr.getMarkPointsMetaData(markpoints_fp)
+                print('Loaded markpoints data from {}'.format(markpoints_fp))
+            else:
+                self.markpoints_metadata = None
+
+            #check if image metadata exists
+            metadata_fp = self.image_filepath.split('.')[0] + '.xml'
+            if os.path.exists(metadata_fp):
+                self.image_metadata = vr.getBrukerMetaData(metadata_fp)
+                print('Loaded image metadata from {}'.format(metadata_fp))
+            else:
+                self.image_metadata = None
+
             self.refreshLassoWidget()
+
 
     def selectRoiFile(self):
         self.roi_filepath, _ = QFileDialog.getOpenFileName(self, "Open roi file (.hdf5)")
@@ -214,7 +237,7 @@ class DataGUI(QWidget):
 
 
     def reloadImage(self):
-        self.loadImage(self.image_filepath, self.current_channel)
+        self.loadImage(self.image_filepath, self.channel)
         self.refreshLassoWidget()
 
 
@@ -223,7 +246,7 @@ class DataGUI(QWidget):
         brain_dims = nib_brain.shape # xyztc
         # TODO: check this for different input shapes
         image_series = nib_brain[:, :, :, :, channel] # xyzt
-        self.current_image_series = image_series
+        self.image_series = image_series
         self.roi_image = np.mean(image_series, axis=3) # xyz
 
         self.zSlider.setValue(0)
@@ -232,7 +255,7 @@ class DataGUI(QWidget):
         print('Loaded ch. {} image from {}: {} (xyzt)'.format(channel, image_filepath, image_series.shape))
 
     def selectChannel(self):
-        self.current_channel = int(self.channel_combobox.currentText())
+        self.channel = int(self.channel_combobox.currentText())
 
 
 
@@ -254,6 +277,16 @@ class DataGUI(QWidget):
                 newImage = self.roi_image[:, :, self.current_z_slice]
             self.roi_ax.imshow(newImage, cmap=cm.gray)
             init_lasso = True
+
+            if self.markpoints_metadata is not None:
+                spiral_diam = float(self.markpoints_metadata.get('Point_1_SpiralWidth')) * self.roi_image.shape[0]
+                spiral_x = float(self.markpoints_metadata.get('Point_1_X'))*self.roi_image.shape[0]
+                spiral_y = float(self.markpoints_metadata.get('Point_1_Y'))*self.roi_image.shape[1]
+                spiral_patch = plt.Circle((spiral_x, spiral_y), spiral_diam, color='r', alpha=0.5)
+                self.roi_ax.add_patch(spiral_patch)
+                self.roi_ax.plot(float(self.markpoints_metadata.get('Point_1_X'))*self.roi_image.shape[0],
+                                 float(self.markpoints_metadata.get('Point_1_Y'))*self.roi_image.shape[1],
+                                 'rx')
         else:
             self.roi_ax.imshow(self.blank_image)
 
@@ -274,14 +307,14 @@ class DataGUI(QWidget):
     def newFreehand(self, verts):
         new_roi_path = path.Path(verts)
         new_roi_path.z_level = self.zSlider.value()
-        new_roi_path.channel = self.current_channel
+        new_roi_path.channel = self.channel
         self.updateRoiSelection([new_roi_path])
 
     def appendFreehand(self, verts):
         print('Appending rois, hit Enter/Return to finish')
         new_roi_path = path.Path(verts)
         new_roi_path.z_level = self.zSlider.value()
-        new_roi_path.channel = self.current_channel
+        new_roi_path.channel = self.channel
         self.roi_path_list.append(new_roi_path)
 
     def keyPressEvent(self, event):
@@ -311,7 +344,7 @@ class DataGUI(QWidget):
         center = (np.round((x1 + x2)/2), np.round((y1 + y2)/2))
         new_roi_path = path.Path.circle(center=center, radius=radiusX)
         new_roi_path.z_level = self.zSlider.value()
-        new_roi_path.channel = self.current_channel
+        new_roi_path.channel = self.channel
         self.updateRoiSelection([new_roi_path])
 
     def updateRoiSelection(self, new_roi_path):
@@ -343,7 +376,7 @@ class DataGUI(QWidget):
         """
         mask = self.getRoiMaskFromPath(roi_path)
 
-        roi_response = np.mean(self.current_image_series[mask, :], axis=0, keepdims=True) - np.min(self.current_image_series)
+        roi_response = np.mean(self.image_series[mask, :], axis=0, keepdims=True) - np.min(self.image_series)
 
         return roi_response
 
@@ -356,7 +389,7 @@ class DataGUI(QWidget):
 
         *Must first define self.current_series
         """
-        x_dim, y_dim, z_dim, t_dim = self.current_image_series.shape
+        x_dim, y_dim, z_dim, t_dim = self.image_series.shape
 
         pixX = np.arange(y_dim)
         pixY = np.arange(x_dim)
@@ -400,14 +433,44 @@ class DataGUI(QWidget):
         return roi_response[0]
 
 
+    def getRoiResponse_ZapResponse(self, roi_response):
+        if (self.markpoints_metadata is not None) & (self.image_metadata is not None):
+            InitialDelay = float(self.markpoints_metadata.get('InitialDelay')) # msec
+            Duration = float(self.markpoints_metadata.get('Duration')) # msec
+            InterPointDelay = float(self.markpoints_metadata.get('InterPointDelay')) # msec
+            Repetitions = int(self.markpoints_metadata.get('Repetitions'))
+            # zap onsets in msec
+            zap_onsets = InitialDelay + np.array([r*(Duration + InterPointDelay) for r in range(Repetitions)])
+
+            # onset_frames
+            frame_period = float(self.image_metadata.get('framePeriod')) * 1e3 # sec -> msec
+            frame_times = np.arange(0, self.image_series.shape[3]) * frame_period # msec
+
+            start_frames = [np.where(frame_times > onset)[0][0] for onset in zap_onsets]
+            zap_duration = int(np.ceil(Duration / frame_period)) # imaging frames
+
+            frames_to_pull = (InterPointDelay + Duration) / frame_period # imaging frames
+            pre_frames = InitialDelay / frame_period
+            traces = []
+            for start_frame in start_frames:
+                new_trace = roi_response[0][int(start_frame - pre_frames):int(start_frame + frames_to_pull)]
+                new_trace[int(pre_frames):int(pre_frames + zap_duration)] = np.nan # blank out photoactivation artifact
+                traces.append(new_trace)
+
+            traces = np.vstack(traces).T
+
+
+        return  traces
+
+
 # %% # # # # # # # # LOADING / SAVING / COMPUTING ROIS # # # # # # # # # # # # # # # # # # #
 
     def loadRois(self, roi_set_path):
-        pass
+        pass #TODO
 
 
     def saveRois(self):
-        pass
+        pass #TODO
 
     def deleteRoi(self):
         if self.current_roi_index < len(self.roi_response):
