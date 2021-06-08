@@ -26,7 +26,7 @@ import visanalysis.volume_registration as vr
 from visanalysis import plot_tools, plugin
 
 import psutil
-
+import pickle
 
 class DataGUI(QWidget):
 
@@ -166,7 +166,7 @@ class DataGUI(QWidget):
                         'axes.facecolor': 'black'})
         self.responseFig = plt.figure()
         self.responsePlot = self.responseFig.add_subplot(111)
-        self.responseFig.subplots_adjust(left=0.05, bottom=0.20, top=0.95, right=0.98)
+        self.responseFig.subplots_adjust(left=0.1, bottom=0.4, top=0.95, right=0.98)
         self.responseCanvas = FigureCanvas(self.responseFig)
         self.responseCanvas.draw_idle()
         self.plot_grid.addWidget(self.responseCanvas, 0, 0)
@@ -421,8 +421,11 @@ class DataGUI(QWidget):
             current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
             fxn_name = self.roi_response_type_combobox.currentText()
             display_trace = getattr(self, 'getRoiResponse_{}'.format(fxn_name))([current_raw_trace])
-            # self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
-            self.responsePlot.plot(display_trace, linewidth=1, alpha=0.5)
+            frame_times = np.arange(0, display_trace.shape[0]) * float(self.image_metadata.get('framePeriod'))
+            self.responsePlot.plot(frame_times, display_trace, linewidth=1, alpha=0.5)
+            if len(display_trace.shape)>1:
+                self.responsePlot.plot(frame_times, np.mean(display_trace, axis=1), color='k', linewidth=2, alpha=1.0)
+            self.responsePlot.set_xlabel('Time (s)')
         self.responseCanvas.draw()
 
         self.refreshLassoWidget(keep_paths=False)
@@ -451,7 +454,6 @@ class DataGUI(QWidget):
             frames_to_pull = InterPointDelay / frame_period # imaging frames
             pre_frames = np.floor(InitialDelay / frame_period)
 
-
             traces = []
             for start_frame in start_frames:
                 new_trace = roi_response[0][int(start_frame - pre_frames):int(start_frame + frames_to_pull)]
@@ -471,7 +473,22 @@ class DataGUI(QWidget):
 
 
     def saveRois(self):
-        pass #TODO
+        roi_results = {}
+        roi_results['roi_mask'] = self.roi_mask
+        roi_results['roi_image'] = self.roi_image
+        roi_results['roi_path']  = self.roi_path
+        roi_results['roi_response'] = self.roi_response
+        fxn_name = self.roi_response_type_combobox.currentText()
+        roi_results[fxn_name] = []
+        for r in range(len(self.roi_response)):
+            roi_results[fxn_name].append(self.getRoiResponse_ZapResponse(self.roi_response[r]))
+
+        roi_name = self.le_roiSetName.text()
+        fn = self.image_filepath.split('.')[0] + '_roi_{}'.format(roi_name)
+        with open('{}.pkl'.format(fn), 'wb') as handle:
+            pickle.dump(roi_results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        print('Saved ROI data at {}'.format(fn))
 
     def deleteRoi(self):
         if self.current_roi_index < len(self.roi_response):
