@@ -24,11 +24,17 @@ def matchQuery(epoch_parameters, query):
     """
     return np.all([epoch_parameters.get(key) == query[key] for key in query])
 
-def filterTrials(epoch_response, ID, query):
+def filterTrials(epoch_response, ID, query, return_inds=False):
     matching_trials = np.where([matchQuery(ep, query) for ep in ID.getEpochParameters()])[0]
 
-    return epoch_response[:, matching_trials, :]
+    if return_inds:
+        return epoch_response[:, matching_trials, :], matching_trials
+    else:
+        return epoch_response[:, matching_trials, :]
 
+def getUniqueParameterCombinations(param_keys, ID):
+    ep_params = [[ep.get(x, None) for x in param_keys]for ep in ID.getEpochParameters()]
+    return list({tuple(row) for row in ep_params})
 
 def plotResponseByCondition(ImagingData, roi_name, condition, eg_ind=0):
     roi_data = ImagingData.getRoiResponses(roi_name)
