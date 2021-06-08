@@ -4,9 +4,9 @@ import numpy as np
 import os
 
 
-experiment_file_directory = '/Users/mhturner/CurrentData'
-experiment_file_name = '2021-05-20'
-series_number = 2
+experiment_file_directory = '/Volumes/ExtremeSSD/BrukerData/20210513/20210513Data'
+experiment_file_name = '2021-05-13'
+series_number = 4
 
 file_path = os.path.join(experiment_file_directory, experiment_file_name + '.hdf5')
 
@@ -36,9 +36,10 @@ acquisition_metadata = ID.getAcquisitionMetadata()
 
 # Get list of rois present in the hdf5 file for this series
 roi_set_names = ID.getRoiSetNames()
+len(roi_set_names)
 
 # getRoiResponses() wants a ROI set name, returns roi_data (dict)
-roi_data = ID.getRoiResponses('LC12')
+roi_data = ID.getRoiResponses('medulla_layers')
 roi_data.keys()
 
 # Plot whole ROI response across entire series
