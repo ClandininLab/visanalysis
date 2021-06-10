@@ -40,6 +40,16 @@ def addStimulusDrawing(ax, stimulus, params):
         ax.add_patch(Circle(center, radius, facecolor=color))
         ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
 
+    elif stimulus == 'LoomingSpot':
+        radius = params.get('radius', 10)
+        color = params.get('color', [0, 0, 0])
+        arrow_len = 0.02 * radius / params.get('rv_ratio', 0.05)
+
+        ax.add_patch(Circle(center, radius, facecolor=color))
+        for direction in [45, 135, 225, 315]:
+            ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
+
+
     ax.set_axis_on()
     ax.set_facecolor([0.5, 0.5, 0.5])
     ax.set_xticks([])

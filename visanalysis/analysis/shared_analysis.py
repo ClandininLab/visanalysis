@@ -76,7 +76,7 @@ def plotRoiResponses(ImagingData, roi_name):
             plot_tools.addScaleBars(ax[r_ind], 1, 1, F_value = -0.1, T_value = -0.2)
 
 
-def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metadata={}):
+def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metadata={}, target_roi_series=[]):
     """
     Searches through a directory of visprotocol datafiles and finds datafiles/series that match the search values
     Can search based on any number of fly metadata params or run parameters
@@ -85,13 +85,13 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
         -data_directory: directory of visprotocol data files to search through
         -target_fly_metadata: (dict) key-value pairs of target parameters to search for in the fly metadata
         -target_series_metadata: (dict) key-value pairs of target parameters to search for in the series run (run parameters)
+        -target_roi_series: (list) required roi_series names
 
     Returns
         -matching_series: List of matching series dicts with all fly & run params as well as file name and series number
     """
     fileNames = glob.glob(data_directory + "/*.hdf5")
     print('Found {} files in {}'.format(len(fileNames), data_directory))
-    # print(fileNames)
 
     # collect key/value pairs for all series in data directory
     all_series = []
@@ -110,13 +110,20 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
                     new_series = {**fly_metadata, **series_metadata}
                     new_series['series'] = int(epoch_run.split('_')[1])
                     new_series['file_name'] = fn.split('\\')[-1].split('.')[0]
+
+                    existing_roi_sets = list(data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).get('rois').keys())
+                    new_series['rois'] = existing_roi_sets
+
                     all_series.append(new_series)
+
 
     # search in all series for target key/value pairs
     match_dict = {**target_fly_metadata, **target_series_metadata}
     matching_series = []
     for series in all_series:
-        if all([series[key] == match_dict[key] for key in match_dict]):
-            matching_series.append(series)
+        if all(series[key] == match_dict[key] for key in match_dict):
+            if np.all([r in series.get('rois') for r in target_roi_series]):
+                matching_series.append(series)
 
+    print('Found {} matching series'.format(len(matching_series)))
     return matching_series
