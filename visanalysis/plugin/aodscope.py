@@ -16,7 +16,8 @@ from nptdms import TdmsFile
 import configparser
 import glob
 
-from visanalysis import plugin, plot_tools
+from visanalysis import plugin
+from visanalysis.util import plot_tools
 
 ##############################################################################
 # Functions for random access poi data from AODscope / Karthala

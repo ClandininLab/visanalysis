@@ -23,7 +23,8 @@ import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 
-from visanalysis import plot_tools, plugin
+from visanalysis import plugin
+from visanalysis.util import plot_tools
 
 import psutil
 

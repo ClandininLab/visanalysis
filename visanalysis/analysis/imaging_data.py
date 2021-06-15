@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.signal as signal
 
-from visanalysis import plot_tools
+from visanalysis.util import plot_tools
 
 
 class ImagingDataObject():

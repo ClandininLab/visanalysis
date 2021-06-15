@@ -14,9 +14,6 @@ import yaml
 from matplotlib.patches import Rectangle, Circle, Arrow
 
 
-import visanalysis
-
-
 def addStimulusDrawing(ax, stimulus, params):
     bounds = params.get('bounds', [-30, 30, -30, 30])
     center = params.get('center', (0, 0))

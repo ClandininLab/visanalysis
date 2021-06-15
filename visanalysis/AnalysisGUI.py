@@ -21,9 +21,9 @@ import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 import nibabel as nib
-import visanalysis.registration as registration
+import visanalysis.util.registration as registration
 
-from visanalysis import plot_tools, plugin
+from visanalysis.util import plot_tools
 
 import psutil
 import pickle
