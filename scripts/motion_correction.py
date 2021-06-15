@@ -8,7 +8,7 @@ import sys
 import time
 import nibabel as nib
 import numpy as np
-from visanalysis import registration
+from visanalysis.util import registration
 
 t0 = time.time()
 
