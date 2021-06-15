@@ -21,7 +21,7 @@ import PyQt5.QtGui as QtGui
 import numpy as np
 import os
 import nibabel as nib
-import visanalysis.volume_registration as vr
+import visanalysis.registration as registration
 
 from visanalysis import plot_tools, plugin
 
@@ -209,7 +209,7 @@ class DataGUI(QWidget):
             #check if mark points metadata exists
             markpoints_fp = self.image_filepath.split('.')[0] + '_Cycle00001_MarkPoints.xml'
             if os.path.exists(markpoints_fp):
-                self.markpoints_metadata = vr.getMarkPointsMetaData(markpoints_fp)
+                self.markpoints_metadata = registration.get_mark_points_metadata(markpoints_fp)
                 print('Loaded markpoints data from {}'.format(markpoints_fp))
             else:
                 self.markpoints_metadata = None
@@ -217,7 +217,7 @@ class DataGUI(QWidget):
             #check if image metadata exists
             metadata_fp = self.image_filepath.split('.')[0] + '.xml'
             if os.path.exists(metadata_fp):
-                self.image_metadata = vr.getBrukerMetaData(metadata_fp, get_frame_times=True)
+                self.image_metadata = registration.get_bruker_metadata(metadata_fp)
                 print('Loaded image metadata from {}'.format(metadata_fp))
             else:
                 self.image_metadata = None
