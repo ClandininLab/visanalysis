@@ -133,6 +133,7 @@ class BrukerPlugin(plugin.base.BasePlugin):
             print('Attached data to series {}'.format(series_number))
 
     def loadImageSeries(self, data_directory, image_file_name, channel=0):
+        metadata_image_dims = self.ImagingDataObject.getAcquisitionMetadata().get('image_dims') # xyztc
         image_file_path = os.path.join(data_directory, image_file_name)
         if '.tif' in image_file_name: # tif assumed to be tyx series
             # native axes order is tyx: convert to xyzt, with z dummy axis
@@ -146,9 +147,13 @@ class BrukerPlugin(plugin.base.BasePlugin):
                 image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
                 print('Loaded xyt image series {}'.format(image_file_path))
 
-            elif len(brain_dims) == 4: # xyzt
-                image_series = nib_brain  # xyzt
-                print('Loaded xyzt image series {}'.format(image_file_path))
+            elif len(brain_dims) == 4: # xyzt or xytc
+                if brain_dims[-1] == metadata_image_dims[-1]: # xytc
+                    image_series = np.squeeze(nib_brain[:, :, :, channel])[:, :, np.newaxis, :]  # xytc -> xyzt
+                    print('Loaded xytc image series {}'.format(image_file_path))
+                else: # xyzt
+                    image_series = nib_brain  # xyzt
+                    print('Loaded xyzt image series {}'.format(image_file_path))
 
             elif len(brain_dims) == 5: # xyztc
                 image_series = np.squeeze(nib_brain[:, :, :, :, channel])  # xyzt
@@ -157,6 +162,8 @@ class BrukerPlugin(plugin.base.BasePlugin):
             else:
                 print('Unrecognized image dimensions')
                 image_series = None
+        else:
+            print('Unrecognized image format. Expects .tif or .nii')
 
         self.current_series = image_series
         self.mean_brain = np.mean(image_series, axis=3) # xyz
