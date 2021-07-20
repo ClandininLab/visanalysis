@@ -5,8 +5,8 @@ import nibabel as nib
 
 
 class VolumetricDataObject(imaging_data.ImagingDataObject):
-    def __init__(self, experiment_file_directory, experiment_file_name, series_number, quiet=False, kwargs=None):
-        super().__init__(experiment_file_directory, experiment_file_name, series_number, quiet, kwargs)
+    def __init__(self, file_path, series_number, quiet=False, kwargs=None):
+        super().__init__(file_path, file_path, series_number, quiet=False, kwargs=None)
 
     def getTrialAlignedVoxelResponses(self, voxels, dff=False):
         n_voxels, t_dim = voxels.shape
