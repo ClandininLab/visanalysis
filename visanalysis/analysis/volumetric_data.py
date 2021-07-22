@@ -16,16 +16,16 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
         # set to minimum
         voxels[np.where(np.isnan(voxels))] = np.nanmin(voxels)
 
-        stimulus_start_times = self.stimulus_timing['stimulus_start_times']  # sec
-        pre_time = self.run_parameters['pre_time']  # sec
-        stim_time = self.run_parameters['stim_time']  # sec
-        tail_time = self.run_parameters['tail_time']  # sec
+        stimulus_start_times = self.getStimulusTiming()['stimulus_start_times']  # sec
+        pre_time = self.getRunParameters()['pre_time']  # sec
+        stim_time = self.getRunParameters()['stim_time']  # sec
+        tail_time = self.getRunParameters()['tail_time']  # sec
         epoch_start_times = stimulus_start_times - pre_time
         epoch_end_times = stimulus_start_times + stim_time + tail_time
         epoch_time = pre_time + stim_time + tail_time # sec
 
-        sample_period = self.response_timing['sample_period']  # sec
-        stack_times = self.response_timing['time_vector']  # sec
+        sample_period = self.getResponseTiming()['sample_period']  # sec
+        stack_times = self.getResponseTiming()['time_vector']  # sec
 
         # find how many acquisition frames correspond to pre, stim, tail time
         epoch_frames = int(epoch_time / sample_period)  # in acquisition frames
@@ -72,9 +72,12 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
         return time_vector, voxel_trial_matrix
 
     def getMeanBrainByStimulus(self, voxel_trial_matrix, parameter_key):
+        run_parameters = self.getRunParameters()
+        response_timing = self.getResponseTiming()
+        epoch_parameters = self.getEpochParameters()
         if type(parameter_key) is dict: #for composite stims like panglom suite
             parameter_values = []
-            for ind_e, ep in enumerate(self.epoch_parameters):
+            for ind_e, ep in enumerate(epoch_parameters):
                 component_stim_type = ep.get('component_stim_type')
                 e_params = [component_stim_type]
                 param_keys = parameter_key[component_stim_type]
@@ -83,14 +86,14 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
                 parameter_values.append(e_params)
         else:
-            parameter_values = [ep.get(parameter_key) for ep in self.epoch_parameters]
+            parameter_values = [ep.get(parameter_key) for ep in epoch_parameters]
 
         unique_parameter_values = np.unique(parameter_values)
         n_stimuli = len(unique_parameter_values)
 
-        pre_frames = int(self.run_parameters['pre_time'] / self.response_timing.get('sample_period'))
-        stim_frames = int(self.run_parameters['stim_time'] / self.response_timing.get('sample_period'))
-        tail_frames = int(self.run_parameters['tail_time'] / self.response_timing.get('sample_period'))
+        pre_frames = int(run_parameters['pre_time'] / response_timing.get('sample_period'))
+        stim_frames = int(run_parameters['stim_time'] / response_timing.get('sample_period'))
+        tail_frames = int(run_parameters['tail_time'] / response_timing.get('sample_period'))
 
         n_voxels, t_dim, trials = voxel_trial_matrix.shape
 
