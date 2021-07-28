@@ -69,6 +69,15 @@ class ImagingDataObject():
                 epoch_parameters.append(new_params)
         return epoch_parameters
 
+    def getEpochParameterDicts(self):
+        stim_dicts = []
+        for ep in self.getEpochParameters():
+            new_keys = [key for key in ep.keys() if 'current' in key or 'component' in key]
+            new_dict = {new_key: ep.get(new_key) for new_key in new_keys}
+            stim_dicts.append(new_dict)
+
+        return stim_dicts
+
     def getFlyMetadata(self):
         """Return fly metadata as dict."""
         with h5py.File(self.file_path, 'r') as experiment_file:

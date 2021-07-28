@@ -71,11 +71,14 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
         return time_vector, voxel_trial_matrix
 
-    def getMeanBrainByStimulus(self, voxel_trial_matrix, parameter_key):
+    def getMeanBrainByStimulus(self, voxel_trial_matrix, parameter_key=None):
         run_parameters = self.getRunParameters()
         response_timing = self.getResponseTiming()
         epoch_parameters = self.getEpochParameters()
-        if type(parameter_key) is dict: #for composite stims like panglom suite
+
+        if parameter_key is None:
+            parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
+        elif type(parameter_key) is dict: #for composite stims like panglom suite
             parameter_values = []
             for ind_e, ep in enumerate(epoch_parameters):
                 component_stim_type = ep.get('component_stim_type')
