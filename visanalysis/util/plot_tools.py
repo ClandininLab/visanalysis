@@ -12,6 +12,7 @@ import datetime
 import inspect
 import yaml
 from matplotlib.patches import Rectangle, Circle, Arrow
+import matplotlib.pyplot as plt
 
 
 def addStimulusDrawing(ax, stimulus, params):
@@ -234,3 +235,15 @@ def overlayImage(im, mask, alpha, colors=None, z=0):
     im_out = untouched + overlayComponent + origImageComponent
     im_out = (im_out * 255).astype(np.uint8)
     return im_out
+
+
+def cleanAxes(ax):
+    ax.set_axis_off()
+    ax.yaxis.set_major_locator(plt.NullLocator())
+    ax.xaxis.set_major_formatter(plt.NullFormatter())
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.get_xaxis().set_ticks([])
+    ax.get_yaxis().set_ticks([])
