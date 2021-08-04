@@ -286,7 +286,7 @@ def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
 # # #  Common motion correction functions # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def register_two_channels_to_red(ch1_brain, ch2_brain, spatial_dims=3):
+def register_two_channels_to_red(ch1_brain, ch2_brain, spatial_dims=3, reference_frames=100):
     """
     Register 2 channels to channel 1 (red)
     Inputs:
@@ -301,7 +301,7 @@ def register_two_channels_to_red(ch1_brain, ch2_brain, spatial_dims=3):
     elif spatial_dims == 2:
         smoothing_sigma = [1.0, 1.0, 2.0] # xyt
 
-    reference = get_time_averaged_brain(get_smooth_brain(ch1_brain, smoothing_sigma=smoothing_sigma), frames=100)
+    reference = get_time_averaged_brain(get_smooth_brain(ch1_brain, smoothing_sigma=smoothing_sigma), frames=reference_frames)
     transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(ch1_brain, smoothing_sigma=smoothing_sigma),
                                                 reference=reference,
                                                 type_of_transform='Rigid',
@@ -322,7 +322,7 @@ def register_two_channels_to_red(ch1_brain, ch2_brain, spatial_dims=3):
     return merged
 
 
-def registerOneChannelToSelf(brain, spatial_dims=3):
+def registerOneChannelToSelf(brain, spatial_dims=3, reference_frames=100):
     """
     Register 1 channel to itself
     Inputs:
@@ -337,7 +337,7 @@ def registerOneChannelToSelf(brain, spatial_dims=3):
     elif spatial_dims == 2:
         smoothing_sigma = [1.0, 1.0, 2.0] # xyt
 
-    reference = get_time_averaged_brain(get_smooth_brain(brain, smoothing_sigma=smoothing_sigma), frames=100)
+    reference = get_time_averaged_brain(get_smooth_brain(brain, smoothing_sigma=smoothing_sigma), frames=reference_frames)
     transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(brain, smoothing_sigma=smoothing_sigma),
                                                 reference=reference,
                                                 type_of_transform='Rigid',
