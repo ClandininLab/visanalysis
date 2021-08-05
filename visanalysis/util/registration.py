@@ -91,19 +91,25 @@ def get_bruker_metadata(file_path):
     elif root.find('Sequence').get('type') == 'TSeries ZSeries Element': # Volume time series
         t_dim = len(sequences)
         z_dim = len(sequences[0].findall('Frame'))
+    elif root.find('Sequence').get('type') == 'ZSeries': # Single Z stack (anatomical)
+        t_dim = 1
+        z_dim = len(sequences[0].findall('Frame'))
+    else:
+        print('!Unrecognized series type in PV metadata!')
 
     metadata['image_dims'] = [int(x_dim), int(y_dim), z_dim, t_dim, c_dim]
 
     # get frame times
     if root.find('Sequence').get('type') == 'TSeries Timed Element': # Plane time series
         frame_times = [float(fr.get('relativeTime')) for fr in root.find('Sequence').findall('Frame')]
+        metadata['frame_times'] = frame_times
+        metadata['sample_period'] = np.mean(np.diff(frame_times))
 
     elif root.find('Sequence').get('type') == 'TSeries ZSeries Element': # Volume time series
         middle_frame = int(len(root.find('Sequence').findall('Frame')) / 2)
         frame_times = [float(seq.findall('Frame')[middle_frame].get('relativeTime')) for seq in root.findall('Sequence')]
-
-    metadata['frame_times'] = frame_times
-    metadata['sample_period'] = np.mean(np.diff(frame_times))
+        metadata['frame_times'] = frame_times
+        metadata['sample_period'] = np.mean(np.diff(frame_times))
 
     return metadata
 
@@ -114,10 +120,10 @@ def get_bruker_metadata(file_path):
 def get_ants_brain(filepath, metadata, channel=0):
     """Load .nii brain file as ANTs image."""
     nib_brain = np.asanyarray(nib.load(filepath).dataobj).astype('uint32')
-    spacing = [float(metadata['micronsPerPixel_XAxis']),
-               float(metadata['micronsPerPixel_YAxis']),
-               float(metadata['micronsPerPixel_ZAxis']),
-               float(metadata['sample_period'])]
+    spacing = [float(metadata.get('micronsPerPixel_XAxis', 0)),
+               float(metadata.get('micronsPerPixel_YAxis', 0)),
+               float(metadata.get('micronsPerPixel_ZAxis', 0)),
+               float(metadata.get('sample_period', 0))]
     spacing = [spacing[x] for x in range(4) if metadata['image_dims'][x] > 1]
 
     if len(nib_brain.shape) > 4: # multiple channels
