@@ -20,13 +20,7 @@ from visanalysis.util import plot_tools
 
 class ImagingDataObject():
     __slots__ = ["file_path", "series_number",  "colors", "quiet"]
-    def __init__(self, file_path, series_number, quiet=False, kwargs=None):
-        kwargs_passed = {'plot_trace_flag': False}
-
-        if kwargs is not None:
-            for key in kwargs:
-                kwargs_passed[key] = kwargs[key]
-
+    def __init__(self, file_path, series_number, quiet=False):
         self.file_path = file_path
         self.series_number = series_number
         self.quiet = quiet
