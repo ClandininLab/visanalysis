@@ -91,7 +91,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
         else:
             parameter_values = [ep.get(parameter_key) for ep in epoch_parameters]
 
-        unique_parameter_values = np.unique(parameter_values)
+        unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         n_stimuli = len(unique_parameter_values)
 
         pre_frames = int(run_parameters['pre_time'] / response_timing.get('sample_period'))
