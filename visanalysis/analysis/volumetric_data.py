@@ -78,6 +78,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
         if parameter_key is None:
             parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         elif type(parameter_key) is dict: #for composite stims like panglom suite
             parameter_values = []
             for ind_e, ep in enumerate(epoch_parameters):
@@ -88,10 +89,11 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
                     e_params.append(ep.get(pk))
 
                 parameter_values.append(e_params)
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         else:
             parameter_values = [ep.get(parameter_key) for ep in epoch_parameters]
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
 
-        unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         n_stimuli = len(unique_parameter_values)
 
         pre_frames = int(run_parameters['pre_time'] / response_timing.get('sample_period'))

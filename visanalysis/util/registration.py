@@ -360,3 +360,41 @@ def registerOneChannelToSelf(brain, spatial_dims=3, reference_frames=100):
                                             fixed_matrix=fixed_mat)
 
     return transformed_brain_list[0]
+
+
+def registerToReferenceChannel(reference_channel, moving_channel, spatial_dims=3, reference_frames=100,
+                               type_of_transform='Rigid', flow_sigma=3, total_sigma=0):
+    t0 = time.time()
+    if spatial_dims == 3:
+        smoothing_sigma = [1.0, 1.0, 0.0, 2.0]  # xyzt
+    elif spatial_dims == 2:
+        smoothing_sigma = [1.0, 1.0, 2.0]  # xyt
+
+    reference_brain = get_time_averaged_brain(get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
+                                              frames=reference_frames)
+
+    reference_corrected = []
+    moving_corrected = []
+    for brain_frame in range(reference_channel.shape[-1]):  # for time steps
+        reg = ants.registration(reference_brain,
+                                ants.from_numpy(reference_channel[..., brain_frame], spacing=reference_brain.spacing),
+                                type_of_transform=type_of_transform,
+                                flow_sigma=flow_sigma,
+                                total_sigma=total_sigma)
+
+        transformlist = reg['fwdtransforms']
+
+        reference_corrected.append(reg['warpedmovout'].numpy())
+        moving_corrected.append(ants.apply_transforms(reference_brain,
+                                                      ants.from_numpy(moving_channel[..., brain_frame], spacing=reference_brain.spacing),
+                                                      transformlist).numpy())
+
+    # Shape = (xyzt). Cast back to 16bit unsigned integers
+    reference_corrected = np.stack(reference_corrected, -1).astype('uint16')
+    moving_corrected = np.stack(moving_corrected, -1).astype('uint16')
+
+    merged = merge_channels(reference_corrected, moving_corrected)
+
+    return merged
+
+    print('Two channel brain registered: ({:.2f} sec)'.format(time.time()-t0))
