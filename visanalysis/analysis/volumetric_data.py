@@ -127,7 +127,7 @@ class VolumetricDataObject(imaging_data.ImagingDataObject):
 
             response_amp[:, p_ind] = np.mean(response_pts, axis=(1, 2))
 
-            mean_voxel_response[:, :, p_ind] = (np.mean(voxel_trial_matrix[:, :, pull_inds], axis=2))
+            mean_voxel_response[:, :, p_ind] = (np.nanmean(voxel_trial_matrix[:, :, pull_inds], axis=2))
             trial_response_by_stimulus.append(voxel_trial_matrix[:, :, pull_inds])
 
         return mean_voxel_response, unique_parameter_values, p_values, response_amp, trial_response_amp, trial_response_by_stimulus
