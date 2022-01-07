@@ -292,43 +292,44 @@ def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
 # # #  Common motion correction functions # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def register_two_channels_to_red(ch1_brain, ch2_brain, spatial_dims=3, reference_frames=100):
+def registerToReferenceChannel_FilterTransforms(reference_channel, moving_channel, spatial_dims=3, reference_frames=100):
     """
-    Register 2 channels to channel 1 (red)
+    Register 2 channels to channel 1 (red). Separate compute & apply steps to fliter transform fixed_matrix
+       in between. Filtering useful for removing sudden artifacts that sometimes arise with sparse, noisy volumes
     Inputs:
-        ch1_brain, ch2_brain: Ants images
+        reference_channel, moving_channel: Ants images
         spatial_dims: 2 or 3
 
     returns:
         Merged two-channel ndarray
     """
     if spatial_dims == 3:
-        smoothing_sigma = [1.0, 1.0, 0.0, 2.0] # xyzt
+        smoothing_sigma = [1.0, 1.0, 0.0, 2.0]  # xyzt
     elif spatial_dims == 2:
-        smoothing_sigma = [1.0, 1.0, 2.0] # xyt
+        smoothing_sigma = [1.0, 1.0, 2.0]  # xyt
 
-    reference = get_time_averaged_brain(get_smooth_brain(ch1_brain, smoothing_sigma=smoothing_sigma), frames=reference_frames)
-    transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(ch1_brain, smoothing_sigma=smoothing_sigma),
-                                                reference=reference,
-                                                type_of_transform='Rigid',
-                                                flow_sigma=3,
-                                                total_sigma=0)
+    reference = get_time_averaged_brain(get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma), frames=reference_frames)
+    transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
+                                                 reference=reference,
+                                                 type_of_transform='Rigid',
+                                                 flow_sigma=3,
+                                                 total_sigma=0)
 
     # filter transforms to remove single frame artifacts
     filtered_transform_mat = filter_transform_matrix(transform_mat)
 
     # apply transforms to ch1 + ch2 brains
-    transformed_brain_list = apply_transform(brain_list=[ch1_brain, ch2_brain],
-                                            reference_list=[get_time_averaged_brain(ch1_brain), get_time_averaged_brain(ch2_brain)],
-                                            transform_matrix=filtered_transform_mat,
-                                            fixed_matrix=fixed_mat)
+    transformed_brain_list = apply_transform(brain_list=[reference_channel, moving_channel],
+                                             reference_list=[get_time_averaged_brain(reference_channel), get_time_averaged_brain(moving_channel)],
+                                             transform_matrix=filtered_transform_mat,
+                                             fixed_matrix=fixed_mat)
 
     merged = merge_channels(transformed_brain_list[0], transformed_brain_list[1])
 
     return merged
 
 
-def registerOneChannelToSelf(brain, spatial_dims=3, reference_frames=100):
+def registerToSelf_FilterTransforms(brain, spatial_dims=3, reference_frames=100):
     """
     Register 1 channel to itself
     Inputs:
