@@ -64,6 +64,15 @@ class ImagingDataObject():
         return epoch_parameters
 
     def getEpochParameterDicts(self):
+        """
+        Gets epoch parameters that change each epoch within a run.
+
+            Looks for epoch params with "current" or "component" in them,
+            as in, "current_intensity"
+
+            returns: list of epoch parameter dicts
+
+        """
         stim_dicts = []
         for ep in self.getEpochParameters():
             new_keys = [key for key in ep.keys() if 'current' in key or 'component' in key]
@@ -301,19 +310,19 @@ class ImagingDataObject():
 
             roi_data['roi_response'] = roi_data['roi_response'] - bg_roi_response
 
-        time_vector, response_matrix = self.getEpochResponseMatrix(roi_data.get('roi_response'))
+        time_vector, response_matrix = self.getEpochResponseMatrix(np.vstack(roi_data.get('roi_response')))
 
         roi_data['epoch_response'] = response_matrix
         roi_data['time_vector'] = time_vector
 
         return roi_data
 
-    def getEpochResponseMatrix(self, roi_response, dff=True):
+    def getEpochResponseMatrix(self, region_response, dff=True):
         """
-        getEpochReponseMatrix(self, roi_response, dff=True)
+        getEpochReponseMatrix(self, region_response, dff=True)
             Takes in long stack response traces and splits them up into each stimulus epoch
             Params:
-                roi_response: list of roi responses
+                region_response: Matrix of region/voxel responses. Shape = (n regions, time)
                 dff: (Bool) convert from raw intensity value to dF/F based on mean of pre_time
 
             Returns:
@@ -321,7 +330,7 @@ class ImagingDataObject():
                 response_matrix (ndarray): response for each roi in each epoch.
                     shape = (rois, epochs, frames per epoch)
         """
-        roi_response = np.vstack(roi_response)
+        no_regions, t_dim = region_response.shape
 
         run_parameters = self.getRunParameters()
         response_timing = self.getResponseTiming()
@@ -329,11 +338,9 @@ class ImagingDataObject():
 
         epoch_start_times = stimulus_timing['stimulus_start_times'] - run_parameters['pre_time']
         epoch_end_times = stimulus_timing['stimulus_end_times'] + run_parameters['tail_time']
-        # Use measured stimulus lengths for stim time instead of epoch param
-        # cut off a bit of the end of each epoch to allow for slop in how many frames were acquired
-        epoch_time = 0.97*(run_parameters['pre_time'] +
-                           run_parameters['stim_time'] +
-                           run_parameters['tail_time']) # sec
+        epoch_time = (run_parameters['pre_time']
+                      + run_parameters['stim_time']
+                      + run_parameters['tail_time'])  # sec
 
         # find how many acquisition frames correspond to pre, stim, tail time
         epoch_frames = int(epoch_time / response_timing['sample_period'])  # in acquisition frames
@@ -341,17 +348,16 @@ class ImagingDataObject():
         time_vector = np.arange(0, epoch_frames) * response_timing['sample_period']  # sec
 
         no_trials = len(epoch_start_times)
-        no_rois = roi_response.shape[0]
-        response_matrix = np.empty(shape=(no_rois, no_trials, epoch_frames), dtype=float)
+        response_matrix = np.empty(shape=(no_regions, no_trials, epoch_frames), dtype=float)
         response_matrix[:] = np.nan
-        cut_inds = np.empty(0, dtype=int)
+        cut_inds = np.empty(0, dtype=int)  # trial/epoch indices to cut from response_matrix
         for idx, val in enumerate(epoch_start_times):
             stack_inds = np.where(np.logical_and(response_timing['time_vector'] < epoch_end_times[idx],
                                                  response_timing['time_vector'] >= epoch_start_times[idx]))[0]
             if len(stack_inds) == 0:  # no imaging acquisitions happened during this epoch presentation
                 cut_inds = np.append(cut_inds, idx)
                 continue
-            if np.any(stack_inds > roi_response.shape[1]):
+            if np.any(stack_inds > region_response.shape[1]):
                 cut_inds = np.append(cut_inds, idx)
                 continue
             if idx == no_trials:
@@ -360,7 +366,7 @@ class ImagingDataObject():
                     print('Missed acquisition frames at the end of the stimulus!')
                     continue
             # pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
-            new_resp_chunk = roi_response[:, stack_inds]
+            new_resp_chunk = region_response[:, stack_inds]
 
             if dff:
                 # calculate baseline using pre frames
@@ -371,13 +377,94 @@ class ImagingDataObject():
             try:
                 response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
             except:
-                print('Size mismatch idx = {}'.format(idx)) # the end of a response clipped off
+                print('Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
                 cut_inds = np.append(cut_inds, idx)
 
         if len(cut_inds) > 0:
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
-        response_matrix = np.delete(response_matrix, cut_inds, axis=1)
+        response_matrix = np.delete(response_matrix, cut_inds, axis=1)  # shape = (region, trial, time)
         return time_vector, response_matrix
+
+    def getTrialAverages(self, epoch_response_matrix, parameter_key=None):
+        """
+        getTrialAverages(self, epoch_response_matrix, parameter_key=None)
+        Returns trial averages and standard errors conditioned on some parameter value(s)
+        Params:
+            -epoch_response: ndarray, shape = (rois, epochs, time)
+            -parameter_key:
+                -None (default): conditions on any parameter containing "current" or "component"
+                -string: name of a single protocol parameter you want to split on
+                -dict: keys are component_stim_type and values are lists of parameter names for that component stim
+
+        Returns:
+            mean_response: ndarray, trial-average responses, shape = (n_regions x stim condition x time)
+            sem_response: ndarray, trial-S.E.M. responses, shape = (n_regions x stim condition x time)
+            trial_response_by_stimulus: list of ndarrays
+                (len=n_stimuli) of trial responses for each stim condition, each shape = (n_regions x trials x time)
+
+        """
+        epoch_parameters = self.getEpochParameters()
+
+        if parameter_key is None:
+            parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
+        elif type(parameter_key) is dict:  # for composite stims like panglom suite
+            parameter_values = []
+            for ind_e, ep in enumerate(epoch_parameters):
+                component_stim_type = ep.get('component_stim_type')
+                e_params = [component_stim_type]
+                param_keys = parameter_key[component_stim_type]
+                for pk in param_keys:
+                    e_params.append(ep.get(pk))
+
+                parameter_values.append(e_params)
+        else:
+            parameter_values = [ep.get(parameter_key) for ep in epoch_parameters]
+
+        unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
+        n_stimuli = len(unique_parameter_values)
+
+        n_regions, n_trials, t_dim = epoch_response_matrix.shape
+
+        mean_response = np.ndarray(shape=(n_regions, n_stimuli, t_dim))  # n_regions x stim condition x time
+        sem_response = np.ndarray(shape=(n_regions, n_stimuli, t_dim))  # n_regions x stim condition x time
+
+        trial_response_by_stimulus = []
+        for p_ind, up in enumerate(unique_parameter_values):  # For distinct stimulus parameterizations
+            pull_inds = np.where([up == x for x in parameter_values])[0]  # trial indices matching this parameterization
+
+            if np.any(pull_inds >= epoch_response_matrix.shape[1]):
+                tmp = np.where(pull_inds >= epoch_response_matrix.shape[1])[0]
+                print('Epoch(s) {} not included in epoch_response_matrix'.format(pull_inds[tmp]))
+                pull_inds = pull_inds[pull_inds < epoch_response_matrix.shape[1]]
+
+            mean_response[:, p_ind, :] = np.nanmean(epoch_response_matrix[:, pull_inds, :], axis=1)
+            sem_response[:, p_ind, :] = np.nanstd(epoch_response_matrix[:, pull_inds, :], axis=1) / np.sqrt(len(pull_inds))
+            trial_response_by_stimulus.append(epoch_response_matrix[:, pull_inds, :])
+
+        return unique_parameter_values, mean_response, sem_response, trial_response_by_stimulus
+
+    def getResponseAmplitude(self, epoch_response_matrix, metric='max'):
+        """
+        Get response amplitude from the start of the stimulus to the end of the trial
+        Params:
+            -epoch_response: ndarray, shape = (..., time)
+
+        Returns:
+            -response_amplitude: shape = (...)
+
+        """
+        run_parameters = self.getRunParameters()
+        response_timing = self.getResponseTiming()
+
+        pre_frames = int(run_parameters['pre_time'] / response_timing.get('sample_period'))
+        # stim_frames = int(run_parameters['stim_time'] / response_timing.get('sample_period'))
+
+        if metric == 'max':
+            response_amplitude = np.nanmax(epoch_response_matrix[..., pre_frames:], axis=-1)
+        elif metric == 'mean':
+            response_amplitude = np.nanmean(epoch_response_matrix[..., pre_frames:], axis=-1)
+
+        return response_amplitude
 
     def generateRoiMap(self, roi_name, scale_bar_length=0, z=0):
         """
