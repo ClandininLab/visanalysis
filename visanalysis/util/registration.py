@@ -8,110 +8,17 @@ flowSigma - this will regularize the similarity metric graident,
 totalSigma - this will regularize the total deformation field.
     usually zero, higher values will restrict the amount of deformation allowed
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import time
-import xml.etree.ElementTree as ET
 
-import numpy as np
 import ants
+import numpy as np
 import nibabel as nib
 from scipy.ndimage import gaussian_filter
 from scipy.signal import medfilt
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # #  Bruker / Prairie View metadata functions # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def get_mark_points_metadata(file_path):
-    """
-    Parse Bruker / PrairieView markpoints metadata from .xml file.
-
-    file_path: .xml filepath
-    returns
-        metadata: dict
-    """
-    metadata = {}
-
-    root = ET.parse(file_path).getroot()
-    for key in root.keys():
-        metadata[key] = root.get(key)
-
-    point_element = root.find('PVMarkPointElement')
-    for key in point_element.keys():
-        metadata[key] = point_element.get(key)
-
-    galvo_element = point_element[0]
-    for key in galvo_element.keys():
-        metadata[key] = galvo_element.get(key)
-
-    points = list(galvo_element)
-    for point_ind, point in enumerate(points):
-        for key in point.keys():
-            metadata['Point_{}_{}'.format(point_ind+1, key)] = point.get(key)
-
-    return metadata
-
-def get_bruker_metadata(file_path):
-    """
-    Parse Bruker / PrairieView metadata from .xml file.
-
-    file_path: .xml filepath
-    returns
-        metadata: dict
-    """
-    root = ET.parse(file_path).getroot()
-
-    metadata = {}
-    for child in list(root.find('PVStateShard')):
-        if child.get('value') is None:
-            for subchild in list(child):
-                new_key = child.get('key') + '_' + subchild.get('index')
-                new_value = subchild.get('value')
-                metadata[new_key] = new_value
-
-        else:
-            new_key = child.get('key')
-            new_value = child.get('value')
-            metadata[new_key] = new_value
-
-    metadata['version'] = root.get('version')
-    metadata['date'] = root.get('date')
-    metadata['notes'] = root.get('notes')
-
-    # Get axis dims
-    sequences = root.findall('Sequence')
-    c_dim = len(sequences[0].findall('Frame')[0].findall('File')) # number of channels
-    x_dim = metadata['pixelsPerLine']
-    y_dim = metadata['linesPerFrame']
-
-    if root.find('Sequence').get('type') == 'TSeries Timed Element': # Plane time series
-        t_dim = len(sequences[0].findall('Frame'))
-        z_dim = 1
-    elif root.find('Sequence').get('type') == 'TSeries ZSeries Element': # Volume time series
-        t_dim = len(sequences)
-        z_dim = len(sequences[0].findall('Frame'))
-    elif root.find('Sequence').get('type') == 'ZSeries': # Single Z stack (anatomical)
-        t_dim = 1
-        z_dim = len(sequences[0].findall('Frame'))
-    else:
-        print('!Unrecognized series type in PV metadata!')
-
-    metadata['image_dims'] = [int(x_dim), int(y_dim), z_dim, t_dim, c_dim]
-
-    # get frame times
-    if root.find('Sequence').get('type') == 'TSeries Timed Element': # Plane time series
-        frame_times = [float(fr.get('relativeTime')) for fr in root.find('Sequence').findall('Frame')]
-        metadata['frame_times'] = frame_times
-        metadata['sample_period'] = np.mean(np.diff(frame_times))
-
-    elif root.find('Sequence').get('type') == 'TSeries ZSeries Element': # Volume time series
-        middle_frame = int(len(root.find('Sequence').findall('Frame')) / 2)
-        frame_times = [float(seq.findall('Frame')[middle_frame].get('relativeTime')) for seq in root.findall('Sequence')]
-        metadata['frame_times'] = frame_times
-        metadata['sample_period'] = np.mean(np.diff(frame_times))
-
-    return metadata
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # #  Load image files # # # # # # # # # # # # # # # # # # # # #
@@ -126,12 +33,13 @@ def get_ants_brain(filepath, metadata, channel=0):
                float(metadata.get('sample_period', 0))]
     spacing = [spacing[x] for x in range(4) if metadata['image_dims'][x] > 1]
 
-    if len(nib_brain.shape) > 4: # multiple channels
+    if len(nib_brain.shape) > 4:  # multiple channels
         # trim to single channel
         return ants.from_numpy(np.squeeze(nib_brain[..., channel]), spacing=spacing)
     else:
         # return ants.from_numpy(np.squeeze(nib_brain[..., :300]), spacing=spacing) # TESTING
         return ants.from_numpy(np.squeeze(nib_brain), spacing=spacing)
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # #  Image processing # # # # # # # # # # # # # # # # # # # # #
@@ -161,7 +69,7 @@ def get_time_averaged_brain(brain, frames=None):
 
     returns time-averaged brain, ants. Dim =  (spatial)
     """
-    spacing = list(np.array(brain.spacing)[...,:-1])
+    spacing = list(np.array(brain.spacing)[..., :-1])
     return ants.from_numpy(brain[..., 0:frames].mean(axis=len(brain.shape)-1), spacing=spacing)
 
 
@@ -175,7 +83,8 @@ def merge_channels(ch1, ch2):
         merged np array, 2 channel brain (dims, c)
 
     """
-    return np.stack([ch1, ch2], axis=-1) # c is last dimension
+    return np.stack([ch1, ch2], axis=-1)  # c is last dimension
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # Transformations # # # # # # # # # # # # # # # # # # # # # #
@@ -249,6 +158,7 @@ def compute_transform(brain, reference, type_of_transform='Rigid', flow_sigma=3,
     print('Transform computed: ({:.2f} sec)'.format(time.time()-t0))
 
     return np.array(transform_matrix), np.array(fixed_matrix)
+
 
 def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
     """

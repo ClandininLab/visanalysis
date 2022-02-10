@@ -87,6 +87,12 @@ class BasePlugin():
     ###########################################################################
 
     def getSeriesNumbers(self, file_path):
+        """
+        Retrieve all epoch series numbers from hdf5 file
+
+        args
+            file_path: string, full path to hdf5 data file
+        """
         all_series = []
         with h5py.File(file_path, 'r') as experiment_file:
             for fly_id in list(experiment_file['/Flies'].keys()):
