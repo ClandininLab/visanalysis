@@ -117,7 +117,8 @@ def filter_transform_matrix(transform_matrix):
     """
     med_filtered = [medfilt(transform_matrix[:, x], kernel_size=9) for x in range(transform_matrix.shape[1])]
 
-    return np.vstack(med_filtered).T # (time, parameters)
+    return np.vstack(med_filtered).T  # (time, parameters)
+
 
 def compute_transform(brain, reference, type_of_transform='Rigid', flow_sigma=3, total_sigma=0):
     """
@@ -134,12 +135,12 @@ def compute_transform(brain, reference, type_of_transform='Rigid', flow_sigma=3,
         fixed_matrix: matrix of ANTs fixed transform parameters (time, parameters)
     """
     t0 = time.time()
-    frame_spacing = list(np.array(brain.spacing)[...,:-1])
+    frame_spacing = list(np.array(brain.spacing)[..., :-1])
 
     transform_matrix = []
     fixed_matrix = []
     # corr_out = [] # uncomment and return this to get directly corrected brain
-    for brain_frame in range(brain.shape[-1]): # for time steps
+    for brain_frame in range(brain.shape[-1]):  # for time steps
         reg = ants.registration(reference,
                                 ants.from_numpy(brain[..., brain_frame], spacing=frame_spacing),
                                 type_of_transform=type_of_transform,
@@ -176,9 +177,9 @@ def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
 
     transformed_brain_list = []
     for b_ind, brain in enumerate(brain_list):
-        frame_spacing = list(np.array(brain.spacing)[...,:-1])
+        frame_spacing = list(np.array(brain.spacing)[..., :-1])
         corrected = []
-        for brain_frame in range(brain.shape[-1]): # for time steps
+        for brain_frame in range(brain.shape[-1]):  # for time steps
             tx = ants.create_ants_transform(transform_type='AffineTransform', dimension=len(frame_spacing))
             tx.set_parameters(transform_matrix[brain_frame, :])
             tx.set_fixed_parameters(fixed_matrix[brain_frame, :])
