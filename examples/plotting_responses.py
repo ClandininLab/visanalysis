@@ -1,3 +1,9 @@
+"""
+Example script to interact with ImagingDataObject, and extract data.
+
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
+"""
 from visanalysis.analysis import imaging_data, shared_analysis
 import matplotlib.pyplot as plt
 import os
@@ -53,10 +59,10 @@ ax1.set_xlabel('Time (s)')
 
 # %%
 
-ID.generateRoiMap(roi_name='set_1', z=3)
+ID.generateRoiMap(roi_name='set_1', z=1)
 
 # %%
 shared_analysis.plotRoiResponses(ID, roi_name='set_2')
 
 # %%
-shared_analysis.plotResponseByCondition(ID, roi_name='set_2', condition='current_diameter', eg_ind=0)
+shared_analysis.plotResponseByCondition(ID, roi_name='set_2', condition='current_intensity', eg_ind=0)

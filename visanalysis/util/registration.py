@@ -202,7 +202,7 @@ def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # #  Common motion correction functions # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
+# TODO: clean this up. Rename, put somewhere else?
 def registerToReferenceChannel_FilterTransforms(reference_channel, moving_channel, spatial_dims=3, reference_frames=100):
     """
     Register 2 channels to channel 1 (red). Separate compute & apply steps to fliter transform fixed_matrix

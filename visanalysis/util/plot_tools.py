@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Assorted plotting utilities.
 

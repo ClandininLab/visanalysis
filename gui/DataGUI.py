@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Data file GUI and ROI drawer for visanalysis.
+Data file GUI and ROI drawer.
 
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu

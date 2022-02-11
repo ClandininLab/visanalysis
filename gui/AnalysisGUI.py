@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 ROI drawer for bruker image series.
 
@@ -28,7 +27,7 @@ from visanalysis.util import plot_tools
 import pickle
 
 
-class DataGUI(QWidget):
+class AnalysisGUI(QWidget):
 
     def __init__(self):
         super().__init__()
@@ -517,5 +516,5 @@ class DataGUI(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = DataGUI()
+    ex = AnalysisGUI()
     sys.exit(app.exec_())
