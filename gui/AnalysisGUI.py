@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Data file GUI and ROI drawer for visanalysis.
+ROI drawer for bruker image series.
 
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import path
-import seaborn as sns
+import matplotlib.colors as mcolors
 from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
 from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
@@ -60,7 +60,7 @@ class DataGUI(QWidget):
         self.roi_path_list = []
 
         self.blank_image = np.zeros((1, 1))
-        self.colors = sns.color_palette("deep", n_colors=20)
+        self.colors = [mcolors.to_rgb(x) for x in list(mcolors.TABLEAU_COLORS)[:20]]
 
         self.initUI()
 
