@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri May 31 09:43:59 2019
+AODscope / Karthala plugin.
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import os
 import xml.etree.ElementTree as ET
@@ -10,7 +11,6 @@ import numpy as np
 from matplotlib import path
 import h5py
 import skimage.io as io
-from tifffile import imsave
 import functools
 from nptdms import TdmsFile
 import configparser

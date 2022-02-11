@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Bruker / Prairie View plugin for visanalysis.
+Bruker / Prairie View plugin.
 
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu

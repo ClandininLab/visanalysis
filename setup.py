@@ -14,8 +14,6 @@ setup(
                       'scipy',
                       'pandas',
                       'scikit-image',
-                      'seaborn',
-                      'pyyaml',
                       'matplotlib',
                       'npTDMS',
                       'nibabel',

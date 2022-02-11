@@ -1,5 +1,5 @@
 """
-Shared analysis tools for visanalysis
+Shared analysis tools.
 
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu

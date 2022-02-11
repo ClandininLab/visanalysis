@@ -1,64 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Dec  1 12:46:07 2018
+Assorted plotting utilities.
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import numpy as np
-import matplotlib.colors as mcolors
-import h5py
-import os
-import datetime
-import inspect
-import yaml
-from matplotlib.patches import Rectangle, Circle, Arrow
 import matplotlib.pyplot as plt
-
-
-def addStimulusDrawing(ax, stimulus, params):
-    bounds = params.get('bounds', [-30, 30, -30, 30])
-    center = params.get('center', (0, 0))
-
-    if stimulus == 'MovingRectangle':
-        width = params.get('width', 1)
-        height = params.get('height', 2)
-        color = params.get('color', [0, 0, 0])
-        direction = params.get('direction', 0)
-        arrow_len = 1.2*width
-
-        ax.add_patch(Rectangle((center[0] - width/2, center[1] - height/2), width, height, facecolor=color))
-        ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
-
-    elif stimulus == 'ExpandingMovingSpot':
-        radius = params.get('radius', 1)
-        color = params.get('color', [0, 0, 0])
-        direction = params.get('direction', 0)
-        arrow_len = 1.2*radius
-
-        ax.add_patch(Circle(center, radius, facecolor=color))
-        ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
-
-    elif stimulus == 'LoomingSpot':
-        radius = params.get('radius', 10)
-        color = params.get('color', [0, 0, 0])
-        arrow_len = 0.02 * radius / params.get('rv_ratio', 0.05)
-
-        ax.add_patch(Circle(center, radius, facecolor=color))
-        for direction in [45, 135, 225, 315]:
-            ax.add_patch(Arrow(center[0], center[1], dx=np.cos(np.deg2rad(direction))*arrow_len, dy=np.sin(np.deg2rad(direction))*arrow_len, color='r'))
-
-
-    ax.set_axis_on()
-    ax.set_facecolor([0.5, 0.5, 0.5])
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlim([bounds[0], bounds[1]])
-    ax.set_ylim([bounds[2], bounds[3]])
-    ax.set_aspect('equal')
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
 
 
 def addLine(ax, x, y, line_name='', color='k', linestyle='-', marker='None'):
@@ -95,72 +43,8 @@ def addErrorBars(ax, xdata, ydata, line_name='',
 
 
 def addScaleBars(axis, dT, dF, T_value=-0.1, F_value=-0.4):
-        axis.plot(T_value * np.ones((2)), np.array([F_value, F_value + dF]), 'k-', alpha=0.9)
-        axis.plot(np.array([T_value, dT + T_value]), F_value * np.ones((2)), 'k-', alpha=0.9)
-
-
-def makeIgorStructure(ax, file_name=None, directory=None):
-    if file_name is None:
-        file_name = datetime.datetime.now().isoformat()
-    if directory is None:
-        directory = os.getcwd()
-    axis_structure = getAxisStructure(ax)
-    file_path = os.path.join(directory, file_name + '.h5')
-    if os.path.isfile(file_path):
-        os.remove(file_path)
-        print('Overwriting existing figure file')
-        print('New igor export: ' + file_name)
-
-    figure_file = h5py.File(file_path, 'w-')
-
-    for k, v in axis_structure.items():
-        figure_file[file_name + '/' + k] = v
-
-    figure_file.close()
-
-
-def getAxisStructure(ax):
-    axis_structure = {}
-    axis_structure['Xlabel'] = ax.get_xlabel()
-    axis_structure['Ylabel'] = ax.get_ylabel()
-    axis_structure['Xlim'] = ax.get_xlim()
-    axis_structure['Ylim'] = ax.get_ylim()
-    axis_structure['Xscale'] = ax.get_xscale()
-    axis_structure['Yscale'] = ax.get_yscale()
-
-    for line in ax.lines:
-        base_name = line.get_label()
-        if hasattr(line, 'tag'):
-            axis_structure[base_name + '_tag'] = line.tag
-
-        # line data:
-        axis_structure[base_name + '_X'] = line.get_xdata()
-        axis_structure[base_name + '_Y'] = line.get_ydata()
-        # colors:
-        axis_structure[base_name + '_color'] = mcolors.to_rgb(line.get_color())
-        axis_structure[base_name + '_markercolor'] = mcolors.to_rgb(line.get_markerfacecolor())
-        # styles:
-        axis_structure[base_name + '_marker'] = convertMarkerStyleToIgor(line.get_marker())
-        axis_structure[base_name + '_linestyle'] = convertLineStyleToIgor(line.get_linestyle())
-
-    # remove entries where item is None
-    axis_structure = {k: v for k, v in axis_structure.items() if v is not None}
-    return axis_structure
-
-
-def convertMarkerStyleToIgor(marker_code):
-    conversion_dictionary = {'.': 19, 'o': 8, 'v': 23, '^': 17, '<': 46, '>': 49,
-                             's': 16, '+': 3, 'd': 29, 'D': 18, 'None': None}
-    m = conversion_dictionary.get(marker_code)
-
-    return m
-
-
-def convertLineStyleToIgor(line_code):
-    conversion_dictionary = {':': 1, '-.': 4, '--': 3,'-': 0, 'None': None}
-    igor_code = conversion_dictionary.get(line_code)
-
-    return igor_code
+    axis.plot(T_value * np.ones((2)), np.array([F_value, F_value + dF]), 'k-', alpha=0.9)
+    axis.plot(np.array([T_value, dT + T_value]), F_value * np.ones((2)), 'k-', alpha=0.9)
 
 
 def _addXError(ax, x, y, err_x, line_name, mode, stat, color):

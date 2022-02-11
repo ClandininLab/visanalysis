@@ -1,5 +1,5 @@
 """
-Tools for brain loading, registration, and some Bruker stuff.
+Tools for brain loading, registration. Relies on ANTSpy.
 
 ---ANTSpy registration params---
 Ref: https://rstudio-pubs-static.s3.amazonaws.com/295353_14e261742cae4e7fb237de43b74d9d0c.html
