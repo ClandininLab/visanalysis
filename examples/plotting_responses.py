@@ -1,20 +1,17 @@
 from visanalysis.analysis import imaging_data, shared_analysis
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 
-
-experiment_file_directory = '/Users/mhturner/CurrentData'
-experiment_file_name = '2021-05-20'
-series_number = 2
+experiment_file_directory = '/Users/mhturner/GitHub/visanalysis/examples/example_data/responses'
+experiment_file_name = '2021-07-07'
+series_number = 1
 
 file_path = os.path.join(experiment_file_directory, experiment_file_name + '.hdf5')
 
 # ImagingDataObject wants a path to an hdf5 file and a series number from that file
 ID = imaging_data.ImagingDataObject(file_path,
                                     series_number,
-                                    quiet=True,
-                                    kwargs={'plot_trace_flag': False})
+                                    quiet=False)
 
 # %% PARAMETERS & METADATA
 
@@ -38,7 +35,7 @@ acquisition_metadata = ID.getAcquisitionMetadata()
 roi_set_names = ID.getRoiSetNames()
 
 # getRoiResponses() wants a ROI set name, returns roi_data (dict)
-roi_data = ID.getRoiResponses('LC12')
+roi_data = ID.getRoiResponses('set_1')
 roi_data.keys()
 
 # Plot whole ROI response across entire series
@@ -56,10 +53,10 @@ ax1.set_xlabel('Time (s)')
 
 # %%
 
-ID.generateRoiMap(roi_name='LC12', z=3)
+ID.generateRoiMap(roi_name='set_1', z=3)
 
 # %%
-shared_analysis.plotRoiResponses(ID, roi_name='LC12')
+shared_analysis.plotRoiResponses(ID, roi_name='set_2')
 
 # %%
-shared_analysis.plotResponseByCondition(ID, roi_name='LC12', condition='current_diameter', eg_ind=0)
+shared_analysis.plotResponseByCondition(ID, roi_name='set_2', condition='current_diameter', eg_ind=0)
