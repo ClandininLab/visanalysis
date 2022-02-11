@@ -1,5 +1,5 @@
 """
-Parent acquisition plugin class for visanalysis.
+Parent acquisition plugin class.
 
 To define a new acquisition plugin, define the indicated methods
 in the plugin subclass to overwrite these placeholders
@@ -180,12 +180,12 @@ class BasePlugin():
 
     # roi display computation functions
     def getRoiResponse_TrialAverage(self, roi_response):
-        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(np.vstack(roi_response), dff=False)
         trial_avg = np.mean(response_matrix, axis=(0, 1))
         return trial_avg
 
     def getRoiResponse_TrialAverageDFF(self, roi_response):
-        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=True)
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(np.vstack(roi_response), dff=True)
         trial_avg = np.mean(response_matrix, axis=(0, 1))
         return trial_avg
 
@@ -193,7 +193,7 @@ class BasePlugin():
         return roi_response[0]
 
     def getRoiResponse_TrialResponses(self, roi_response):
-        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(roi_response, dff=False)
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(np.vstack(roi_response), dff=False)
         TrialResponses = np.mean(response_matrix, axis=0).T
         return TrialResponses
 
