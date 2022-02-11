@@ -5,27 +5,28 @@ Data file GUI and ROI drawer.
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
 """
+import os
+import psutil
 import sys
+
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import path
 import matplotlib.colors as mcolors
 from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
-from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
+from PyQt6.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QSlider,
                              QMessageBox, QTreeWidget, QTreeWidgetItem)
-import PyQt5.QtCore as QtCore
-import PyQt5.QtGui as QtGui
+import PyQt6.QtCore as QtCore
+import PyQt6.QtGui as QtGui
 import numpy as np
-import os
+
 
 from visanalysis import plugin
 from visanalysis.util import plot_tools
-
-import psutil
 
 
 class DataGUI(QWidget):
@@ -43,7 +44,7 @@ class DataGUI(QWidget):
 
         self.current_roi_index = 0
         self.current_z_slice = 0
-        self.current_channel = 1 # index
+        self.current_channel = 1  # index
         self.image_series_name = ''
         self.series_number = None
         self.roi_response = []
@@ -146,13 +147,13 @@ class DataGUI(QWidget):
         item.setFont(font)
         item.setBackground(QtGui.QColor(121, 121, 121))
         brush = QtGui.QBrush(QtGui.QColor(91, 91, 91))
-        brush.setStyle(QtCore.Qt.SolidPattern)
+        brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
         item.setForeground(brush)
         self.tableAttributes.setHorizontalHeaderItem(0, item)
         item = QTableWidgetItem()
         item.setBackground(QtGui.QColor(123, 123, 123))
         brush = QtGui.QBrush(QtGui.QColor(91, 91, 91))
-        brush.setStyle(QtCore.Qt.SolidPattern)
+        brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
         item.setForeground(brush)
         self.tableAttributes.setHorizontalHeaderItem(1, item)
         self.tableAttributes.horizontalHeader().setCascadingSectionResizes(True)
@@ -216,21 +217,25 @@ class DataGUI(QWidget):
         self.roi_control_grid.addWidget(self.deleteROIButton, 2, 0)
 
         # Current roi slider
-        self.roiSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.roiSlider = QSlider(QtCore.Qt.Orientation.Horizontal, self)
         self.roiSlider.setMinimum(0)
         self.roiSlider.setMaximum(self.max_rois)
         self.roiSlider.valueChanged.connect(self.sliderUpdated)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 1)
 
-        plt.rc_context({'axes.edgecolor': 'white',
-                        'xtick.color': 'white',
-                        'ytick.color': 'white',
-                        'figure.facecolor': 'black',
-                        'axes.facecolor': 'black'})
-        self.responseFig = plt.figure()
-        self.responsePlot = self.responseFig.add_subplot(111)
-        self.responseFig.subplots_adjust(left=0.05, bottom=0.20, top=0.95, right=0.98)
-        self.responseCanvas = FigureCanvas(self.responseFig)
+        ctx = plt.rc_context({'xtick.major.size': 1,
+                              'axes.spines.top': False,
+                              'axes.spines.right': False,
+                              'xtick.labelsize': 'xx-small',
+                              'ytick.labelsize': 'xx-small',
+                              'xtick.major.size': 1.0,
+                              'ytick.major.size': 1.0,
+                              'xtick.major.pad': 1.0,
+                              'ytick.major.pad': 1.0})
+        with ctx:
+            self.responseFig = plt.figure(frameon=False, layout='constrained')
+            self.responsePlot = self.responseFig.add_subplot(111)
+            self.responseCanvas = FigureCanvas(self.responseFig)
         self.responseCanvas.draw_idle()
         self.plot_grid.addWidget(self.responseCanvas, 0, 0)
 
@@ -248,7 +253,7 @@ class DataGUI(QWidget):
         self.plot_grid.setRowStretch(2, 3)
 
         # Current z slice slider
-        self.zSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.zSlider = QSlider(QtCore.Qt.Orientation.Horizontal, self)
         self.zSlider.setMinimum(0)
         self.zSlider.setMaximum(50)
         self.zSlider.setValue(0)
@@ -461,8 +466,9 @@ class DataGUI(QWidget):
         buttonReply = QMessageBox.question(self,
                                            'Delete series',
                                            "Are you sure you want to delete group {}?".format(group_name),
-                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if buttonReply == QMessageBox.Yes:
+                                           QMessageBox.StandardButton.Yes |
+                                           QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if buttonReply == QMessageBox.StandardButton.Yes:
             plugin.base.deleteGroup(file_path=file_path,
                                     group_path=group_path)
             print('Deleted group {}'.format(group_name))
@@ -478,7 +484,7 @@ class DataGUI(QWidget):
 
     def populate_attrs(self, attr_dict=None, editable_values=False):
         """Populate attribute for currently selected group."""
-        self.tableAttributes.blockSignals(True) # block udpate signals for auto-filled forms
+        self.tableAttributes.blockSignals(True)  # block udpate signals for auto-filled forms
         self.tableAttributes.setRowCount(0)
         self.tableAttributes.setColumnCount(2)
         self.tableAttributes.setSortingEnabled(False)
@@ -487,14 +493,14 @@ class DataGUI(QWidget):
             for num, key in enumerate(attr_dict):
                 self.tableAttributes.insertRow(self.tableAttributes.rowCount())
                 key_item = QTableWidgetItem(key)
-                key_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                key_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 0, key_item)
 
                 val_item = QTableWidgetItem(str(attr_dict[key]))
                 if editable_values:
-                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled)
+                    val_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEditable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 else:
-                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                    val_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 1, val_item)
 
         self.tableAttributes.blockSignals(False)
@@ -527,6 +533,7 @@ class DataGUI(QWidget):
             init_lasso = True
         else:
             self.roi_ax.imshow(self.blank_image)
+        self.roi_ax.set_axis_off()
 
         self.roi_canvas.draw()
 
@@ -557,7 +564,7 @@ class DataGUI(QWidget):
 
     def keyPressEvent(self, event):
         if type(event) == QtGui.QKeyEvent:
-            if np.any([event.key() == QtCore.Qt.Key_Return, event.key() == QtCore.Qt.Key_Enter]):
+            if np.any([event.key() == QtCore.Qt.Key.Key_Return, event.key() == QtCore.Qt.Key.Key_Enter]):
                 if len(self.roi_path_list) > 0:
                     event.accept()
                     self.updateRoiSelection(self.roi_path_list)
@@ -611,9 +618,8 @@ class DataGUI(QWidget):
         if self.roi_image is not None:
             self.refreshLassoWidget(keep_paths=True)
 
-
     def redrawRoiTraces(self):
-        self.responsePlot.clear()
+        self.clearRoiArtists()
         if self.current_roi_index < len(self.roi_response):
             current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
             fxn_name = self.RoiResponseTypeComboBox.currentText()
@@ -639,8 +645,9 @@ class DataGUI(QWidget):
             buttonReply = QMessageBox.question(self,
                                                'Overwrite roi set',
                                                "Are you sure you want to overwrite roi set: {}?".format(roi_set_name),
-                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if buttonReply == QMessageBox.Yes:
+                                               QMessageBox.StandardButton.Yes |
+                                               QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if buttonReply == QMessageBox.StandardButton.Yes:
                 self.plugin.saveRoiSet(file_path,
                                        series_number=self.series_number,
                                        roi_set_name=roi_set_name,
@@ -678,9 +685,13 @@ class DataGUI(QWidget):
         self.roi_response = []
         self.roi_path = []
         self.roi_image = None
-        self.responsePlot.clear()
+        self.clearRoiArtists()
         self.redrawRoiTraces()
         self.roi_ax.clear()
+
+    def clearRoiArtists(self):
+        for artist in self.responsePlot.lines + self.responsePlot.collections:
+            artist.remove()
 
     def selectRoiType(self):
         self.roi_type = self.RoiTypeComboBox.currentText().split(':')[0]
@@ -697,4 +708,4 @@ class DataGUI(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = DataGUI()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
