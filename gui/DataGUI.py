@@ -319,8 +319,11 @@ class DataGUI(QWidget):
                 self.image_file_name = image_file_name
                 self.currentImageFileNameLabel.setText(self.image_file_name)
 
+        else:  # clicked part of the tree upstream of any series
+            self.series_number = None
+
         if item.parent() is not None:
-            if item.parent().text(column) == 'rois': # selected existing roi group
+            if item.parent().text(column) == 'rois':  # selected existing roi group
                 roi_set_name = item.text(column)
                 # print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
                 self.le_roiSetName.setText(roi_set_name)
@@ -337,16 +340,19 @@ class DataGUI(QWidget):
             self.populate_attrs(attr_dict=attr_dict, editable_values=editable_values)
 
         # show roi image
-        if self.series_number is not None:
+        if self.series_number is not None:  # Clicked on node of the tree associated with a single series
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.plugin.updateImageSeries(data_directory=self.data_directory,
-                                              image_file_name=self.image_file_name,
-                                              series_number=self.series_number,
-                                              channel=self.current_channel)
-                self.roi_image = self.plugin.mean_brain
-                self.zSlider.setValue(0)
-                self.zSlider.setMaximum(self.roi_image.shape[2]-1)
-                self.redrawRoiTraces()
+                if self.plugin.dataIsAttached(file_path, self.series_number):
+                    self.plugin.updateImageSeries(data_directory=self.data_directory,
+                                                  image_file_name=self.image_file_name,
+                                                  series_number=self.series_number,
+                                                  channel=self.current_channel)
+                    self.roi_image = self.plugin.mean_brain
+                    self.zSlider.setValue(0)
+                    self.zSlider.setMaximum(self.roi_image.shape[2]-1)
+                    self.redrawRoiTraces()
+                else:
+                    print('Attach metadata to file before drawing rois')
 
             else:
                 print('Select a data directory before drawing rois')
@@ -626,6 +632,8 @@ class DataGUI(QWidget):
             fxn_name = self.RoiResponseTypeComboBox.currentText()
             display_trace = getattr(self.plugin, 'getRoiResponse_{}'.format(fxn_name))([current_raw_trace])
             self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
+            self.responsePlot.set_xlim([0, len(display_trace)])
+            self.responsePlot.set_ylim([display_trace.min(), display_trace.max()])
         self.responseCanvas.draw()
 
         self.refreshLassoWidget(keep_paths=False)
