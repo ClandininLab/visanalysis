@@ -8,7 +8,7 @@ setup(
     author='Max Turner',
     author_email='mhturner@stanford.edu',
     packages=['visanalysis'],
-    install_requires=['PyQT6',
+    install_requires=[
                       'numpy',
                       'h5py',
                       'scipy',
