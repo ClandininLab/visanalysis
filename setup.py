@@ -18,6 +18,7 @@ setup(
                       'npTDMS',
                       'nibabel',
                       'psutil'],
+    extras_require={'gui':  ["PyQT6"]},
     include_package_data=True,
     zip_safe=False,
 )
