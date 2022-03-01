@@ -13,10 +13,10 @@ import skimage.io as io
 import functools
 import nibabel as nib
 
-from visanalysis import plugin
+from visanalysis.plugin import base as base_plugin
 
 
-class BrukerPlugin(plugin.base.BasePlugin):
+class BrukerPlugin(base_plugin.BasePlugin):
     def __init__(self):
         super().__init__()
         self.current_series = None
@@ -115,14 +115,14 @@ class BrukerPlugin(plugin.base.BasePlugin):
 
                     # make sure subgroups exist for stimulus and response timing
                     stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                    plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
-                    plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                    base_plugin.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                    base_plugin.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                     stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                     acquisition_group = epoch_run_group.require_group('acquisition')
-                    plugin.base.overwriteDataSet(acquisition_group, 'time_points', response_timing['stack_times'])
+                    base_plugin.overwriteDataSet(acquisition_group, 'time_points', response_timing['stack_times'])
                     if 'frame_times' in response_timing:
-                        plugin.base.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
+                        base_plugin.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
                     acquisition_group.attrs['sample_period'] = response_timing['sample_period']
                     for key in metadata:
                         acquisition_group.attrs[key] = metadata[key]
@@ -314,7 +314,7 @@ def getAcquisitionTiming(filepath):
     return response_timing
 
 
-def get_mark_points_metadata(filepath):
+def getMarkPointsMetadata(filepath):
     """
     Parse Bruker / PrairieView markpoints metadata from .xml file.
 

@@ -30,7 +30,7 @@ def get_ants_brain(filepath, metadata, channel=0):
     spacing = [float(metadata.get('micronsPerPixel_XAxis', 0)),
                float(metadata.get('micronsPerPixel_YAxis', 0)),
                float(metadata.get('micronsPerPixel_ZAxis', 0)),
-               float(metadata.get('sample_period', 0))]
+               float(metadata.get('framePeriod', 0))]
     spacing = [spacing[x] for x in range(4) if metadata['image_dims'][x] > 1]
 
     if len(nib_brain.shape) > 4:  # multiple channels
@@ -127,8 +127,8 @@ def compute_transform(brain, reference, type_of_transform='Rigid', flow_sigma=3,
     brain: xyzt ants brain
     reference: xyz ants brain
     type_of_transform: 'Rigid' or 'Translation' are good
-    flow_sigma:
-    total_sigma:
+    flow_sigma: higher sigma focuses on coarser features
+    total_sigma: higher values will restrict the amount of deformation allowed
 
     return
         transform_matrix: matrix of ANTs transform parameters (time, parameters)
@@ -200,96 +200,36 @@ def apply_transform(brain_list, reference_list, transform_matrix, fixed_matrix):
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # #  Common motion correction functions # # # # # # # # # # # #
+# # #  Common motion correction function  # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# TODO: clean this up. Rename, put somewhere else?
-def registerToReferenceChannel_FilterTransforms(reference_channel, moving_channel, spatial_dims=3, reference_frames=100):
+
+def motion_correct(reference_channel,
+                   yoked_channel=None,
+                   reference_frames=100,
+                   type_of_transform='Rigid',
+                   flow_sigma=3,
+                   total_sigma=0
+                   ):
     """
-    Register 2 channels to channel 1 (red). Separate compute & apply steps to fliter transform fixed_matrix
-       in between. Filtering useful for removing sudden artifacts that sometimes arise with sparse, noisy volumes
-    Inputs:
-        reference_channel, moving_channel: Ants images
-        spatial_dims: 2 or 3
+    motion_correct: useful general purpose motion correction for 1 or 2 channels
+        Computes and applies transform for each frame in the same step
 
-    returns:
-        Merged two-channel ndarray
+    args:
+        reference_channel: ANTs image. Compute and apply correction to this brain
+        yoked_channel: ANTs image, apply computed correction to this brain | Default None
+        reference_frames: First n frames to pull for reference brain | Default 100
+        type_of_transform: see ANTsPy documentation | Default 'Rigid'
+        flow_sigma: higher sigma focuses on coarser features | Default 3
+        total_sigma: higher values will restrict the amount of deformation allowed | Default 0
+
     """
-    if spatial_dims == 3:
-        smoothing_sigma = [1.0, 1.0, 0.0, 2.0]  # xyzt
-    elif spatial_dims == 2:
-        smoothing_sigma = [1.0, 1.0, 2.0]  # xyt
-
-    reference = get_time_averaged_brain(get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma), frames=reference_frames)
-    transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
-                                                 reference=reference,
-                                                 type_of_transform='Rigid',
-                                                 flow_sigma=3,
-                                                 total_sigma=0)
-
-    # filter transforms to remove single frame artifacts
-    filtered_transform_mat = filter_transform_matrix(transform_mat)
-
-    # apply transforms to ch1 + ch2 brains
-    transformed_brain_list = apply_transform(brain_list=[reference_channel, moving_channel],
-                                             reference_list=[get_time_averaged_brain(reference_channel), get_time_averaged_brain(moving_channel)],
-                                             transform_matrix=filtered_transform_mat,
-                                             fixed_matrix=fixed_mat)
-
-    merged = merge_channels(transformed_brain_list[0], transformed_brain_list[1])
-
-    return merged
-
-
-def registerToSelf_FilterTransforms(brain, spatial_dims=3, reference_frames=100):
-    """
-    Register 1 channel to itself
-    Inputs:
-        brain: Ants image
-        spatial_dims: 2 or 3
-
-    returns:
-        xyzt ndarray
-    """
-    if spatial_dims == 3:
-        smoothing_sigma = [1.0, 1.0, 0.0, 2.0] # xyz
-    elif spatial_dims == 2:
-        smoothing_sigma = [1.0, 1.0, 2.0] # xyt
-
-    reference = get_time_averaged_brain(get_smooth_brain(brain, smoothing_sigma=smoothing_sigma), frames=reference_frames)
-    transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(brain, smoothing_sigma=smoothing_sigma),
-                                                reference=reference,
-                                                type_of_transform='Rigid',
-                                                flow_sigma=3,
-                                                total_sigma=0)
-
-    # filter transforms to remove single frame artifacts
-    filtered_transform_mat = filter_transform_matrix(transform_mat)
-
-    # apply transforms
-    transformed_brain_list = apply_transform(brain_list=[brain],
-                                            reference_list=[get_time_averaged_brain(brain)],
-                                            transform_matrix=filtered_transform_mat,
-                                            fixed_matrix=fixed_mat)
-
-    return transformed_brain_list[0]
-
-
-def registerToReferenceChannel(reference_channel, moving_channel, spatial_dims=3, reference_frames=100,
-                               type_of_transform='Rigid', flow_sigma=3, total_sigma=0):
-    t0 = time.time()
-    if spatial_dims == 3:
-        smoothing_sigma = [1.0, 1.0, 0.0, 2.0]  # xyzt
-    elif spatial_dims == 2:
-        smoothing_sigma = [1.0, 1.0, 2.0]  # xyt
-
-    reference_brain = get_time_averaged_brain(get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
-                                              frames=reference_frames)
+    spatial_reference = get_time_averaged_brain(reference_channel, frames=reference_frames)
 
     reference_corrected = []
-    moving_corrected = []
+    yoked_corrected = []
     for brain_frame in range(reference_channel.shape[-1]):  # for time steps
-        reg = ants.registration(reference_brain,
-                                ants.from_numpy(reference_channel[..., brain_frame], spacing=reference_brain.spacing),
+        reg = ants.registration(spatial_reference,
+                                ants.from_numpy(reference_channel[..., brain_frame], spacing=spatial_reference.spacing),
                                 type_of_transform=type_of_transform,
                                 flow_sigma=flow_sigma,
                                 total_sigma=total_sigma)
@@ -297,16 +237,74 @@ def registerToReferenceChannel(reference_channel, moving_channel, spatial_dims=3
         transformlist = reg['fwdtransforms']
 
         reference_corrected.append(reg['warpedmovout'].numpy())
-        moving_corrected.append(ants.apply_transforms(reference_brain,
-                                                      ants.from_numpy(moving_channel[..., brain_frame], spacing=reference_brain.spacing),
-                                                      transformlist).numpy())
+        if yoked_channel:
+            yoked_corrected.append(ants.apply_transforms(spatial_reference,
+                                                         ants.from_numpy(yoked_channel[..., brain_frame], spacing=spatial_reference.spacing),
+                                                         transformlist).numpy())
 
     # Shape = (xyzt). Cast back to 16bit unsigned integers
     reference_corrected = np.stack(reference_corrected, -1).astype('uint16')
-    moving_corrected = np.stack(moving_corrected, -1).astype('uint16')
+    if yoked_channel:
+        yoked_corrected = np.stack(yoked_corrected, -1).astype('uint16')
+    else:
+        yoked_corrected = None
 
-    merged = merge_channels(reference_corrected, moving_corrected)
+    return reference_corrected, yoked_corrected
 
-    return merged
 
-    print('Two channel brain registered: ({:.2f} sec)'.format(time.time()-t0))
+def motion_correct_noisy(reference_channel,
+                         yoked_channel=None,
+                         reference_frames=100,
+                         type_of_transform='Rigid',
+                         flow_sigma=3,
+                         total_sigma=0,
+                         filter_transforms=False,
+                         smoothing_sigma=[1.0, 1.0, 0.0, 2.0]
+                         ):
+    """
+    motion_correct_noisy: version of motion_correct with some optional parameters that
+        help with noisy or sparse image series
+        see motion_correct for desctiption of most params
+        This is SLOWER than motion_correct, since it splits up the transform & apply steps
+
+    args:
+        filter_transforms: Bool. Whether to filter corrections for single frame jumps | Default False
+        smoothing_sigma: Sigmas for smoothing each dimension before motion correcting, for filter_transforms=True | Default [1.0, 1.0, 0.0, 2.0] xyzt
+
+
+    """
+    #  Compute transforms
+    if smoothing_sigma:
+        spatial_reference = get_time_averaged_brain(get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
+                                                    frames=reference_frames)
+        transform_mat, fixed_mat = compute_transform(brain=get_smooth_brain(reference_channel, smoothing_sigma=smoothing_sigma),
+                                                     reference=spatial_reference,
+                                                     type_of_transform=type_of_transform,
+                                                     flow_sigma=flow_sigma,
+                                                     total_sigma=total_sigma)
+    else:  # No smoothing
+        spatial_reference = get_time_averaged_brain(reference_channel, frames=reference_frames)
+        transform_mat, fixed_mat = compute_transform(brain=reference_channel,
+                                                     reference=spatial_reference,
+                                                     type_of_transform=type_of_transform,
+                                                     flow_sigma=flow_sigma,
+                                                     total_sigma=total_sigma)
+
+    if filter_transforms:
+        # filter transforms to remove single frame artifacts
+        transform_mat = filter_transform_matrix(transform_mat)
+
+    # Apply transforms
+    if yoked_channel:
+        reference_corrected, yoked_corrected = apply_transform(brain_list=[reference_channel, yoked_channel],
+                                                               reference_list=[get_time_averaged_brain(reference_channel), get_time_averaged_brain(yoked_channel)],
+                                                               transform_matrix=transform_mat,
+                                                               fixed_matrix=fixed_mat)
+    else:
+        yoked_corrected = None
+        reference_corrected = apply_transform(brain_list=[reference_channel],
+                                              reference_list=[get_time_averaged_brain(reference_channel)],
+                                              transform_matrix=transform_mat,
+                                              fixed_matrix=fixed_mat)[0]
+
+    return reference_corrected, yoked_corrected
