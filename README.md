@@ -4,15 +4,26 @@ Visanalysis is an analysis environment for [visprotocol](github.com/clandininlab
 
 Contact: Max Turner, mhturner@stanford.edu
 
-**Installation**
-- In command window, cd to top-level visanalysis/ and run:
-    
+## Installation
+- visanalysis has been tested with Python 3.9 and Python 3.6, on OSX and Linux. It may work on Windows, but it hasn't been tested.
+
+### Dependencies
+- PyQT6 is required for the GUI (optional)
+- [ANTsPy](https://github.com/ANTsX/ANTsPy) is required for all image registration functions. To install ANTsPy:
+
+    `pip install antspyx`
+
+### Install visanalysis
+1. **GUI:** To install the basic, GUI-free version. cd to top-level visanalysis/, where setup.py lives, and run:
+  
     `pip install -e .`
 
-**Documentation**
+2. **GUI-free:** To be able to use the GUI, run:
+    `pip install -e .[gui]` in bash or `pip install -e ".[gui]"` in zsh (note quotes)
 
-Check out the [wiki](https://github.com/ClandininLab/visanalysis/wiki) for more detailed documentation & how-tos
+## Documentation and examples
+- /examples contains some example scripts that you can use to get oriented to visanalysis and to test things out on your machine. The example_data are not included in this repository. You may download example data [here](https://drive.google.com/drive/folders/1oJYcUjXBudPpiCPd4wDlIYoWLE30CURR?usp=sharing)
+- Check out the [wiki](https://github.com/ClandininLab/visanalysis/wiki) for more detailed documentation & how-tos
 
----
 
 
