@@ -16,7 +16,7 @@ t0 = time.time()
 
 # first arg: path to image series base, without .suffix
 #   e.g. /path/to/imaging/data/TSeries-20210611-001
-parser = argparse.ArgumentParser(description='Process some integers.')
+parser = argparse.ArgumentParser(description='ANTsPy based motion correction for volumetric time series')
 parser.add_argument('file_base_path', type=str,
                     help='Path to file base path with no suffixes. E.g. /path/to/data/TSeries-20210611-001')
 

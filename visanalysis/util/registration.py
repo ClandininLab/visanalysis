@@ -12,7 +12,6 @@ https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
 """
 import time
-
 import ants
 import numpy as np
 import nibabel as nib

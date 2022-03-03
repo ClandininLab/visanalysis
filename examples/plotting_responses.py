@@ -8,7 +8,7 @@ from visanalysis.analysis import imaging_data, shared_analysis
 import matplotlib.pyplot as plt
 import os
 
-experiment_file_directory = '/Users/mhturner/GitHub/visanalysis/examples/example_data/responses'
+experiment_file_directory = '/Users/mhturner/GitHub/visanalysis/examples/example_data/responses/bruker'
 experiment_file_name = '2021-07-07'
 series_number = 1
 
@@ -39,9 +39,9 @@ acquisition_metadata = ID.getAcquisitionMetadata()
 
 # Get list of rois present in the hdf5 file for this series
 roi_set_names = ID.getRoiSetNames()
-
+roi_set_names
 # getRoiResponses() wants a ROI set name, returns roi_data (dict)
-roi_data = ID.getRoiResponses('set_1')
+roi_data = ID.getRoiResponses('set_2')
 roi_data.keys()
 
 # Plot whole ROI response across entire series
@@ -59,7 +59,7 @@ ax1.set_xlabel('Time (s)')
 
 # %%
 
-ID.generateRoiMap(roi_name='set_1', z=1)
+ID.generateRoiMap(roi_name='set_2', z=1)
 
 # %%
 shared_analysis.plotRoiResponses(ID, roi_name='set_2')

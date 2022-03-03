@@ -337,13 +337,13 @@ class AodScopePlugin(plugin.base.BasePlugin):
         poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]
         full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '_pmt' + str(pmt) + '.tdms')
 
-        try:
+        if os.path.exists(full_file_path):
             tdms_file = TdmsFile(full_file_path)
             time_points = tdms_file.channel_data('PMT'+str(pmt), 'POI time') / 1e3  # msec -> sec
             poi_data_matrix = np.ndarray(shape=(len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
             poi_data_matrix[:] = np.nan
 
-            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])): # first object is time points. Subsequent for POIs
+            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])):  # first object is time points. Subsequent for POIs
                 poi_data_matrix[poi_ind, :] = tdms_file.channel_data('PMT'+str(pmt), 'POI ' + str(poi_ind) + ' ')
 
             # get poi locations in raw coordinates:
@@ -368,17 +368,18 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                                                          snap_name,
                                                                          poi_xy,
                                                                          pmt=1)
-        except:
-            time_points = None
-            poi_data_matrix = None
-            print('No tdms file found at: ' + full_file_path)
+            results_dict = {'time_points': time_points,
+                            'poi_data_matrix': poi_data_matrix,
+                            'poi_xy': poi_xy,
+                            'snap_image': snap_image,
+                            'snap_settings': snap_settings,
+                            'poi_locations': poi_locations}
 
-        return {'time_points': time_points,
-                'poi_data_matrix': poi_data_matrix,
-                'poi_xy': poi_xy,
-                'snap_image': snap_image,
-                'snap_settings': snap_settings,
-                'poi_locations': poi_locations}
+        else:
+            results_dict = {}
+
+
+        return results_dict
 
     def getXytData(self, data_directory, xyt_series_number, pmt=1):
         stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]
