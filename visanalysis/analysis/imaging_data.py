@@ -273,23 +273,32 @@ class ImagingDataObject():
                            'frame_rate': frame_rate}
         return stimulus_timing
 
-    def getRoiSetNames(self):
+    def getRoiSetNames(self, roi_prefix='rois'):
+        """
+
+        -roi_prefix: 'rois' or 'aligned'
+                'rois' used for hand-drawn ROIs, with path objects
+                'aligned' used for mask-generated, no path objects for drawing
+        """
         roi_set_names = []
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
-            roi_parent_group = experiment_file.visititems(find_partial)['rois']
+            roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
             for roi_set_name in roi_parent_group.keys():
                 roi_set_names.append(roi_set_name)
 
         return roi_set_names
 
-    def getRoiResponses(self, roi_set_name, background_subtraction=False):
+    def getRoiResponses(self, roi_set_name, background_subtraction=False, roi_prefix='rois'):
         """
         Get responses for indicated roi
         Params:
             -roi_set_name: (str) name of roi set to pull out
             -background_subtraction: (Bool) subtract background roi values.
                 There must be a roi set for this series called 'bg'
+            -roi_prefix: 'rois' or 'aligned'
+                    'rois' used for hand-drawn ROIs, with path objects
+                    'aligned' used for mask-generated, no path objects for drawing
 
         Returns:
             roi_data: dict, keys:
@@ -302,16 +311,16 @@ class ImagingDataObject():
         roi_data = {}
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
-            roi_parent_group = experiment_file.visititems(find_partial)['rois']
+            roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
             roi_set_group = roi_parent_group[roi_set_name]
             roi_data['roi_response'] = list(roi_set_group.get("roi_response")[:])
-            roi_data['roi_mask'] = list(roi_set_group.get("roi_mask")[:])
+            roi_data['roi_mask'] = roi_set_group.get("roi_mask")[:]
             roi_data['roi_image'] = roi_set_group.get("roi_image")[:]
 
         if background_subtraction:
             with h5py.File(self.file_path, 'r') as experiment_file:
                 find_partial = functools.partial(find_series, series_number=self.series_number)
-                roi_parent_group = experiment_file.visititems(find_partial)['rois']
+                roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
                 bg_roi_group = roi_parent_group['bg']
                 bg_roi_response = list(bg_roi_group.get("roi_response")[:])
 

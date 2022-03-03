@@ -57,7 +57,7 @@ class BrukerPlugin(base_plugin.BasePlugin):
         """
         mask = self.getRoiMaskFromPath(roi_path)
 
-        roi_response = np.mean(self.current_series[mask, :], axis=0, keepdims=True) - np.min(self.current_series)
+        roi_response = np.mean(self.current_series[mask, :], axis=0, keepdims=True)
 
         return roi_response
 
@@ -166,6 +166,34 @@ class BrukerPlugin(base_plugin.BasePlugin):
 
         self.current_series = image_series
         self.mean_brain = np.mean(image_series, axis=3)  # xyz
+
+    def saveRegionResponsesFromMask(self, file_path, series_number, response_set_name, mask, include_zero=False):
+        """
+        Save region responses from a mask to the data file
+
+        args
+            file_path: string, full path to hdf5 data file
+            series_number: int, series in hdf5 data file
+            channel: int, which pmt/channel to load
+        """
+        mask_values = np.unique(mask)
+        if include_zero:
+            pass
+        else:  # Don't compute region responses for pixels where mask == 0
+            mask_values = mask_values[mask_values != 0]
+
+        region_responses = [np.mean(self.current_series[mask == label, :], axis=0) for label in mask_values]
+        region_responses = np.vstack(region_responses)  # mask ID x Time
+
+        with h5py.File(file_path, 'r+') as experiment_file:
+            find_partial = functools.partial(base_plugin.find_series, sn=series_number)
+            epoch_run_group = experiment_file.visititems(find_partial)
+            parent_roi_group = epoch_run_group.require_group('aligned')
+            current_roi_group = parent_roi_group.require_group(response_set_name)
+
+            base_plugin.overwriteDataSet(current_roi_group, 'roi_mask', mask)
+            base_plugin.overwriteDataSet(current_roi_group, 'roi_response', region_responses)
+            base_plugin.overwriteDataSet(current_roi_group, 'roi_image', self.mean_brain)
 
     # %%
     ###########################################################################
