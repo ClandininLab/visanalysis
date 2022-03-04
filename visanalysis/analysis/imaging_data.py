@@ -36,8 +36,8 @@ class ImagingDataObject():
         self.colors = [mcolors.to_rgb(x) for x in list(mcolors.TABLEAU_COLORS)[:20]]
 
         # check to see if hdf5 file exists
-        if not os.path.exists(self.file_path):
-            raise Exception('No hdf5 file found at {}, check your filepath'.format(self.file_path))
+        assert self.file_path.split('.')[-1] == 'hdf5', 'file_path must point to an .hdf5 file, \n current file_path is {}'.format(self.file_path)
+        assert os.path.exists(self.file_path), 'No hdf5 file found at \n {}, check your filepath'.format(self.file_path)
 
         # check to see if series exists in this file:
         with h5py.File(self.file_path, 'r') as experiment_file:
@@ -46,29 +46,50 @@ class ImagingDataObject():
             if epoch_run_group is None:
                 raise Exception('No series {} found in {}'.format(self.series_number, self.file_path))
 
-    def getRunParameters(self):
-        """Return epoch run parameters as dict."""
+    def getRunParameters(self, param_key=None):
+        """
+        Return epoch run parameter(s)
+
+        :param_key: name of run parameter to return. If None, return all run parametrs as dict. Default=None
+
+        """
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
-            run_parameters = {}
-            for attr_key in epoch_run_group.attrs:
-                run_parameters[attr_key] = epoch_run_group.attrs[attr_key]
 
-        return run_parameters
+            if param_key:
+                assert param_key in epoch_run_group.attrs, 'Run parameter "{}" not found in run parameters. \n'.format(param_key) \
+                    + 'Available run parameters are {}'.format([x for x in epoch_run_group.attrs])
+                run_parameter = epoch_run_group.attrs[param_key]
+            else:  # Get all run parameters in a dict
+                run_parameter = {}
+                for attr_key in epoch_run_group.attrs:
+                    run_parameter[attr_key] = epoch_run_group.attrs[attr_key]
 
-    def getEpochParameters(self):
-        """Return list of epoch parameters, one dict for each trial."""
+        return run_parameter
+
+    def getEpochParameters(self, param_key=None):
+        """
+        Return epoch parameters
+
+        :param_key: name of epoch parameter to return. If None, return all epoch parametrs as list of dicts. Default=None
+
+        """
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
-            epoch_parameters = []
+            epoch_parameter = []
             for epoch in epoch_run_group['epochs'].values():
-                new_params = {}
-                for attr_key in epoch.attrs:
-                    new_params[attr_key] = epoch.attrs[attr_key]
-                epoch_parameters.append(new_params)
-        return epoch_parameters
+                if param_key:
+                    assert param_key in epoch.attrs, 'Epoch parameter "{}" not found in epoch_parameters. \n'.format(param_key) \
+                        + 'Available epoch_parameters are {}'.format([x for x in epoch.attrs])
+                    epoch_parameter.append(epoch.attrs[param_key])
+                else:  # Get all epoch parameters as a dict
+                    new_params = {}
+                    for attr_key in epoch.attrs:
+                        new_params[attr_key] = epoch.attrs[attr_key]
+                    epoch_parameter.append(new_params)
+        return epoch_parameter
 
     def getEpochParameterDicts(self):
         """
@@ -88,27 +109,50 @@ class ImagingDataObject():
 
         return stim_dicts
 
-    def getFlyMetadata(self):
-        """Return fly metadata as dict."""
+    def getFlyMetadata(self, metadata_key=None):
+        """
+        Return fly metadata
+
+        :metadata_key: name of metadata item to return. If None, return all metadata as dict. Default=None
+
+        """
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             fly_group = epoch_run_group.parent.parent
-            fly_metadata = {}
-            for attr_key in fly_group.attrs:
-                fly_metadata[attr_key] = fly_group.attrs[attr_key]
+
+            if metadata_key:
+                assert metadata_key in fly_group.attrs, 'metadata_key "{}" not found in metadata. \n'.format(metadata_key) \
+                    + 'Available metadata keys are {}'.format([x for x in fly_group.attrs])
+                fly_metadata = fly_group.attrs[metadata_key]
+            else:  # Get all fly metadata in a dict
+                fly_metadata = {}
+                for attr_key in fly_group.attrs:
+                    fly_metadata[attr_key] = fly_group.attrs[attr_key]
 
         return fly_metadata
 
-    def getAcquisitionMetadata(self):
-        """Return imaging acquisition metadata as dict."""
+    def getAcquisitionMetadata(self, metadata_key=None):
+        """
+        Return imaging acquisition metadata
+
+        :metadata_key: name of metadata item to return. If None, return all metadata as dict. Default=None
+
+        """
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group['acquisition']
-            acquisition_metadata = {}
-            for attr_key in acquisition_group.attrs:
-                acquisition_metadata[attr_key] = acquisition_group.attrs[attr_key]
+
+            if metadata_key:
+                assert metadata_key in acquisition_group.attrs, 'metadata_key "{}" not found in metadata. \n'.format(metadata_key) \
+                    + 'Available metadata keys are {}'.format([x for x in acquisition_group.attrs])
+                acquisition_metadata = acquisition_group.attrs[metadata_key]
+            else:  # Get all imaging metadata in a dict
+                acquisition_metadata = {}
+                for attr_key in acquisition_group.attrs:
+                    acquisition_metadata[attr_key] = acquisition_group.attrs[attr_key]
+
         return acquisition_metadata
 
     def getPhotodiodeData(self):
@@ -312,6 +356,7 @@ class ImagingDataObject():
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(find_series, series_number=self.series_number)
             roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
+            assert roi_set_name in roi_parent_group, 'roi_set_name "{}" not found in roi group'.format(roi_set_name)
             roi_set_group = roi_parent_group[roi_set_name]
             roi_data['roi_response'] = list(roi_set_group.get("roi_response")[:])
             roi_data['roi_mask'] = roi_set_group.get("roi_mask")[:]
@@ -419,11 +464,11 @@ class ImagingDataObject():
                 (len=n_stimuli) of trial responses for each stim condition, each shape = (n_regions x trials x time)
 
         """
-        epoch_parameters = self.getEpochParameters()
 
         if parameter_key is None:
             parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
         elif type(parameter_key) is dict:  # for composite stims like panglom suite
+            epoch_parameters = self.getEpochParameters()
             parameter_values = []
             for ind_e, ep in enumerate(epoch_parameters):
                 component_stim_type = ep.get('component_stim_type')
@@ -434,7 +479,7 @@ class ImagingDataObject():
 
                 parameter_values.append(e_params)
         else:
-            parameter_values = [ep.get(parameter_key) for ep in epoch_parameters]
+            parameter_values = self.getEpochParameters(parameter_key)
 
         unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         n_stimuli = len(unique_parameter_values)
