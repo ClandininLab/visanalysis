@@ -117,3 +117,5 @@ dmypy.json
 *config.yaml
 
 scratch.py
+
+*/example_data
