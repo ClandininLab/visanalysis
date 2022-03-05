@@ -14,6 +14,7 @@ import functools
 import nibabel as nib
 
 from visanalysis.plugin import base as base_plugin
+from visanalysis.util import h5io
 
 
 class BrukerPlugin(base_plugin.BasePlugin):
@@ -115,14 +116,14 @@ class BrukerPlugin(base_plugin.BasePlugin):
 
                     # make sure subgroups exist for stimulus and response timing
                     stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                    base_plugin.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
-                    base_plugin.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                    h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                    h5io.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                     stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                     acquisition_group = epoch_run_group.require_group('acquisition')
-                    base_plugin.overwriteDataSet(acquisition_group, 'time_points', response_timing['stack_times'])
+                    h5io.overwriteDataSet(acquisition_group, 'time_points', response_timing['stack_times'])
                     if 'frame_times' in response_timing:
-                        base_plugin.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
+                        h5io.overwriteDataSet(acquisition_group, 'frame_times', response_timing['frame_times'])
                     acquisition_group.attrs['sample_period'] = response_timing['sample_period']
                     for key in metadata:
                         acquisition_group.attrs[key] = metadata[key]
@@ -186,14 +187,14 @@ class BrukerPlugin(base_plugin.BasePlugin):
         region_responses = np.vstack(region_responses)  # mask ID x Time
 
         with h5py.File(file_path, 'r+') as experiment_file:
-            find_partial = functools.partial(base_plugin.find_series, sn=series_number)
+            find_partial = functools.partial(h5io.find_series, sn=series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             parent_roi_group = epoch_run_group.require_group('aligned')
             current_roi_group = parent_roi_group.require_group(response_set_name)
 
-            base_plugin.overwriteDataSet(current_roi_group, 'roi_mask', mask)
-            base_plugin.overwriteDataSet(current_roi_group, 'roi_response', region_responses)
-            base_plugin.overwriteDataSet(current_roi_group, 'roi_image', self.mean_brain)
+            h5io.overwriteDataSet(current_roi_group, 'roi_mask', mask)
+            h5io.overwriteDataSet(current_roi_group, 'roi_response', region_responses)
+            h5io.overwriteDataSet(current_roi_group, 'roi_image', self.mean_brain)
 
     # %%
     ###########################################################################

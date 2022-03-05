@@ -24,8 +24,7 @@ import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
 import numpy as np
 
-from visanalysis.plugin import base as base_plugin
-from visanalysis.util import plot_tools
+from visanalysis.util import plot_tools, h5io
 
 
 class DataGUI(QWidget):
@@ -297,7 +296,7 @@ class DataGUI(QWidget):
 
     def onTreeItemClicked(self, item, column):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = base_plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.clearRois()
         self.series_number = None
         if 'series_' in group_path:
@@ -306,13 +305,13 @@ class DataGUI(QWidget):
                 self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # look for image_file_name or ask user to select it
             if self.data_directory is not None:
-                image_file_name = base_plugin.readImageFileName(file_path, self.series_number)
+                image_file_name = h5io.readImageFileName(file_path, self.series_number)
                 if image_file_name is None or image_file_name == '':
                     image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
                     print('User selected image file at {}'.format(image_file_path))
                     image_file_name = os.path.split(image_file_path)[-1]
                     self.data_directory = os.path.split(image_file_path)[:-1][0]
-                    base_plugin.attachImageFileName(file_path, self.series_number, image_file_name)
+                    h5io.attachImageFileName(file_path, self.series_number, image_file_name)
                     print('Attached image_file_name {} to series {}'.format(image_file_name, self.series_number))
                     print('Data directory is {}'.format(self.data_directory))
 
@@ -327,12 +326,12 @@ class DataGUI(QWidget):
                 roi_set_name = item.text(column)
                 # print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
                 self.le_roiSetName.setText(roi_set_name)
-                roi_set_path = base_plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+                roi_set_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
                 self.loadRois(roi_set_path)
                 self.redrawRoiTraces()
 
         if group_path != '':
-            attr_dict = base_plugin.getAttributesFromGroup(file_path, group_path)
+            attr_dict = h5io.getAttributesFromGroup(file_path, group_path)
             if 'series' in group_path.split('/')[-1]:
                 editable_values = False  # don't let user edit epoch parameters
             else:
@@ -411,7 +410,7 @@ class DataGUI(QWidget):
 
     def initializeDataAnalysis(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        data_type = base_plugin.getDataType(file_path)
+        data_type = h5io.getDataType(file_path)
         # Load plugin based on Rig name in hdf5 file
         if data_type == 'Bruker':
             from visanalysis.plugin import bruker
@@ -420,7 +419,7 @@ class DataGUI(QWidget):
             from visanalysis.plugin import aodscope
             self.plugin = aodscope.AodScopePlugin()
         else:
-            self.plugin = base_plugin.BasePlugin()
+            self.plugin = h5io.BasePlugin()
 
         self.plugin.parent_gui = self
 
@@ -445,7 +444,7 @@ class DataGUI(QWidget):
         print('User selected image file at {}'.format(image_file_path))
         self.image_file_name = os.path.split(image_file_path)[-1]
         self.data_directory = os.path.split(image_file_path)[:-1][0]
-        base_plugin.attachImageFileName(file_path, self.series_number, self.image_file_name)
+        h5io.attachImageFileName(file_path, self.series_number, self.image_file_name)
         print('Attached image_file_name {} to series {}'.format(self.image_file_name, self.series_number))
         print('Data directory is {}'.format(self.data_directory))
 
@@ -467,7 +466,7 @@ class DataGUI(QWidget):
 
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = base_plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         group_name = group_path.split('/')[-1]
 
         buttonReply = QMessageBox.question(self,
@@ -476,7 +475,7 @@ class DataGUI(QWidget):
                                            QMessageBox.StandardButton.Yes |
                                            QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if buttonReply == QMessageBox.StandardButton.Yes:
-            base_plugin.deleteGroup(file_path=file_path,
+            h5io.deleteGroup(file_path=file_path,
                                     group_path=group_path)
             print('Deleted group {}'.format(group_name))
             self.updateExistingRoiSetList()
@@ -486,7 +485,7 @@ class DataGUI(QWidget):
 
     def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.group_dset_dict = base_plugin.getHierarchy(file_path)
+        self.group_dset_dict = h5io.getHierarchy(file_path)
         self._populateTree(self.groupTree, self.group_dset_dict)
 
     def populate_attrs(self, attr_dict=None, editable_values=False):
@@ -514,13 +513,13 @@ class DataGUI(QWidget):
 
     def update_attrs_to_file(self, item):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = base_plugin.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
 
         attr_key = self.tableAttributes.item(item.row(), 0).text()
         attr_val = item.text()
 
         # update attr in file
-        base_plugin.changeAttribute(file_path=file_path,
+        h5io.changeAttribute(file_path=file_path,
                                     group_path=group_path,
                                     attr_key=attr_key,
                                     attr_val=attr_val)
@@ -650,7 +649,7 @@ class DataGUI(QWidget):
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
-        if roi_set_name in base_plugin.getAvailableRoiSetNames(file_path, self.series_number):
+        if roi_set_name in h5io.getAvailableRoiSetNames(file_path, self.series_number):
             buttonReply = QMessageBox.question(self,
                                                'Overwrite roi set',
                                                "Are you sure you want to overwrite roi set: {}?".format(roi_set_name),
