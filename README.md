@@ -14,11 +14,11 @@ Contact: Max Turner, mhturner@stanford.edu
     `pip install antspyx`
 
 ### Install visanalysis
-1. **GUI:** To install the basic, GUI-free version. cd to top-level visanalysis/, where setup.py lives, and run:
+1. **GUI-free:** To install the basic, GUI-free version. cd to top-level visanalysis/, where setup.py lives, and run:
   
     `pip install -e .`
 
-2. **GUI-free:** To be able to use the GUI, run:
+2. **GUI:** To be able to use the GUI, run:
     `pip install -e .[gui]` in bash or `pip install -e ".[gui]"` in zsh (note quotes)
 
 ## Documentation and examples
