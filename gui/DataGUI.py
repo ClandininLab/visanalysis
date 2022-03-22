@@ -332,10 +332,7 @@ class DataGUI(QWidget):
 
         if group_path != '':
             attr_dict = h5io.getAttributesFromGroup(file_path, group_path)
-            if 'series' in group_path.split('/')[-1]:
-                editable_values = False  # don't let user edit epoch parameters
-            else:
-                editable_values = True
+            editable_values = True  # user can edit metadata
             self.populate_attrs(attr_dict=attr_dict, editable_values=editable_values)
 
         # show roi image
@@ -520,9 +517,9 @@ class DataGUI(QWidget):
 
         # update attr in file
         h5io.changeAttribute(file_path=file_path,
-                                    group_path=group_path,
-                                    attr_key=attr_key,
-                                    attr_val=attr_val)
+                             group_path=group_path,
+                             attr_key=attr_key,
+                             attr_val=attr_val)
         print('Changed attr {} to = {}'.format(attr_key, attr_val))
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #

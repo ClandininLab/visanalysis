@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import scipy.signal as signal
 
-from visanalysis.util import plot_tools
+from visanalysis.util import plot_tools, h5io
 
 
 class ImagingDataObject():
@@ -41,7 +41,7 @@ class ImagingDataObject():
 
         # check to see if series exists in this file:
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             if epoch_run_group is None:
                 raise Exception('No series {} found in {}'.format(self.series_number, self.file_path))
@@ -54,7 +54,7 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
 
             if param_key:
@@ -76,7 +76,7 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             epoch_parameter = []
             for epoch in epoch_run_group['epochs'].values():
@@ -91,7 +91,7 @@ class ImagingDataObject():
                     epoch_parameter.append(new_params)
         return epoch_parameter
 
-    def getEpochParameterDicts(self):
+    def getEpochParameterDicts(self, target_keys=None):
         """
         Gets epoch parameters that change each epoch within a run.
 
@@ -117,7 +117,7 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             fly_group = epoch_run_group.parent.parent
 
@@ -140,7 +140,7 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group['acquisition']
 
@@ -165,7 +165,7 @@ class ImagingDataObject():
             photodiode_sample_rate: (Hz)
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             stimulus_timing_group = epoch_run_group['stimulus_timing']
 
@@ -187,7 +187,7 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             acquisition_group = epoch_run_group['acquisition']
 
@@ -199,7 +199,7 @@ class ImagingDataObject():
 
     def getStimulusTiming(self,
                           plot_trace_flag=False,
-                          threshold=0.8,
+                          threshold=0.6,
                           frame_slop=20,  # datapoints +/- ideal frame duration
                           command_frame_rate=120):
         """
@@ -326,7 +326,7 @@ class ImagingDataObject():
         """
         roi_set_names = []
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
             for roi_set_name in roi_parent_group.keys():
                 roi_set_names.append(roi_set_name)
@@ -354,7 +354,7 @@ class ImagingDataObject():
         """
         roi_data = {}
         with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(find_series, series_number=self.series_number)
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
             assert roi_set_name in roi_parent_group, 'roi_set_name "{}" not found in roi group'.format(roi_set_name)
             roi_set_group = roi_parent_group[roi_set_name]
@@ -364,7 +364,7 @@ class ImagingDataObject():
 
         if background_subtraction:
             with h5py.File(self.file_path, 'r') as experiment_file:
-                find_partial = functools.partial(find_series, series_number=self.series_number)
+                find_partial = functools.partial(h5io.find_series, sn=self.series_number)
                 roi_parent_group = experiment_file.visititems(find_partial)[roi_prefix]
                 bg_roi_group = roi_parent_group['bg']
                 bg_roi_response = list(bg_roi_group.get("roi_response")[:])
@@ -467,6 +467,7 @@ class ImagingDataObject():
 
         if parameter_key is None:
             parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         elif type(parameter_key) is dict:  # for composite stims like panglom suite
             epoch_parameters = self.getEpochParameters()
             parameter_values = []
@@ -478,12 +479,18 @@ class ImagingDataObject():
                     e_params.append(ep.get(pk))
 
                 parameter_values.append(e_params)
-        else:
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
+        elif type(parameter_key) is tuple:  # Tuple of multiple param keys
+            parameter_values = np.vstack([self.getEpochParameters(x) for x in parameter_key]).T
+            unique_parameter_values = np.unique(parameter_values, axis=0)
+        elif type(parameter_key) is str:  # single param key
             parameter_values = self.getEpochParameters(parameter_key)
+            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
+        else:
+            print('Unrecognized parameter_key')
+            return
 
-        unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
         n_stimuli = len(unique_parameter_values)
-
         n_regions, n_trials, t_dim = epoch_response_matrix.shape
 
         mean_response = np.ndarray(shape=(n_regions, n_stimuli, t_dim))  # n_regions x stim condition x time
@@ -547,11 +554,3 @@ class ImagingDataObject():
         if scale_bar_length > 0:
             microns_per_pixel = float(self.getAcquisitionMetadata()['micronsPerPixel_XAxis'])
             plot_tools.addImageScaleBar(ax, new_image, scale_bar_length, microns_per_pixel, 'lr')
-
-
-def find_series(name, obj, series_number):
-    """return hdf5 group object if it corresponds to indicated series_number."""
-    target_group_name = 'series_{}'.format(str(series_number).zfill(3))
-    if target_group_name in name:
-        return obj
-    return None
