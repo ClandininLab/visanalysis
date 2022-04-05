@@ -11,11 +11,11 @@ mhturner@stanford.edu
 import h5py
 import numpy as np
 import functools
-from visanalysis import plugin
 from visanalysis.analysis import imaging_data
 from visanalysis.util import h5io
 from matplotlib import path
 import os
+
 
 
 class BasePlugin():
@@ -128,9 +128,9 @@ class BasePlugin():
             parent_roi_group = epoch_run_group.require_group('rois')
             current_roi_group = parent_roi_group.require_group(roi_set_name)
 
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
+            h5io.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
+            h5io.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
+            h5io.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
 
             for dataset_key in current_roi_group.keys():
                 if 'path_vertices' in dataset_key:
@@ -140,7 +140,7 @@ class BasePlugin():
                 current_roi_index_group = current_roi_group.require_group('roipath_{}'.format(roi_ind))
                 for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
                     current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
-                    plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
+                    h5io.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
                     current_roi_path_group.attrs['z_level'] = p.z_level
                     current_roi_path_group.attrs['channel'] = p.channel
 
