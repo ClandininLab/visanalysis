@@ -1,41 +1,29 @@
 # visanalysis
-Analysis environment for visprotocol/flystim imaging experiments
-Max Turner
-mhturner@stanford.edu
-
-INSTALLATION:
-cd to top-level visanalysis/
-pip install -e .
-
----
-
-**Using the Data GUI** 
+Visanalysis is an analysis environment for [visprotocol](github.com/clandininlab/visprotocol) imaging experiments. It is designed for visual stimulation and functional imaging data, but can be the basis for handling experiments with different datatypes and stimulation protocols, as well. The central idea behind the analysis approach is to get data from disparate sources (e.g. different microscopes or other recording devices) into a common datafile format, which can then be accessed and analyzed by a shared set of downstream analyses.
 
 
-![ss_annotated](https://user-images.githubusercontent.com/9029384/148145301-2e75b87b-8f6f-4ee5-ae05-c5e8515a27d7.jpg)
+Contact: Max Turner, mhturner@stanford.edu
+
+## Installation
+- visanalysis has been tested with Python 3.9 and Python 3.6, on OSX and Linux. It may work on Windows, but it hasn't been tested.
+
+### Dependencies
+- PyQT6 is required for the GUI (optional)
+- [ANTsPy](https://github.com/ANTsX/ANTsPy) is required for all image registration functions. To install ANTsPy:
+
+    `pip install antspyx`
+
+### Install visanalysis
+1. **GUI-free:** To install the basic, GUI-free version. cd to top-level visanalysis/, where setup.py lives, and run:
+  
+    `pip install -e .`
+
+2. **GUI:** To be able to use the GUI, run:
+    `pip install -e .[gui]` in bash or `pip install -e ".[gui]"` in zsh (note quotes)
+
+## Documentation and examples
+- /examples contains some example scripts that you can use to get oriented to visanalysis and to test things out on your machine. The example_data are not included in this repository. You may download example data [here](https://drive.google.com/drive/folders/1oJYcUjXBudPpiCPd4wDlIYoWLE30CURR?usp=sharing)
+- Check out the [wiki](https://github.com/ClandininLab/visanalysis/wiki) for more detailed documentation & how-tos
 
 
-1) run DataGUI.py from the command line
-2) Load experiment (HDF5) file
-3) Select data directory. This should be a directory that contains all of the image series files (.nii or .tif) you want to examine for this experiment
-4) Select a group in the Data tree browser to examine fly metadata or run parameters. Selecting an epoch run series will load any associated image series. If none can be found in the data directory you have selected, it will prompt you to select the image file associated with this series
-5) You may delete groups at any level of the tree you would like (Fly, image series, roi, etc) using the "Delete selected group" button
-6) Once you've loaded an image file associated with a series, you can use the Image & roi canvas to draw ROIs on the image.
-
-    a) Left (primary) click to draw a single ROI. Right (secondary) click to draw a ROI that you can draw in separate, discontiguous segments (including across z levels, by changing the z slider at the bottom of the canvas). For discontiguous ROIs, hit your ENTER key to finish the ROI.
-    
-    b) Once you have drawn a ROI, the response trace will appear. You can change what appears in the trace window using the dropdown menu to, for example, examine a simple trial average. 
-    
-    c) You can add a number of ROIs to a roi set. Examine different ROIs within your roi set by moving the ROI set slider.
-    
-    d) Once you are happy with your ROI set, enter a roi_set_name and click "Save ROIs." The roi information for this roi set, including the paths you drew, a mask for the rois, and the response trace(s) will be saved directly to the HDF5 file and will now appear in the Data Tree Browser.
-    
-7) You can now access the ROI data directly from the HDF5 file and no longer need the image or metadata files (unless you want to draw more ROIs). See the example script visanalysis/analysis/example_plotting.py for some inspiration on how to do this.
-
-
-*Notes & Tips for using the DataGUI*
-- Always keep a backup copy of your raw data file as it was generated during the experiment. You can always go through the steps of re-attaching metadata or re-drawing ROIs if necessary.
-- The GUI will look for image files in the data directory with the following format: TSeries-yyyymmdd-00n.suffix or TSeries-yyyymmdd-00n_reg.suffix (for registered / motion corrected series). If it doesn't find a matching file, it will prompt you to select it yourself. After you have done so once, the file name will be saved to the HDF5 file so in the future you shouldn't have to always manually point to the file. If you'd like to change the associated image file for a series, click "Select image data file" to redefine this file.
-- Before you do anything with these data files, you need to attach data to your HDF5 file, including imaging metadata and stimulus timing information. This metadata comes from associated metadata files generated during imaging. For Bruker, for example, it requires the bruker .xml file, the photodiode .csv and photodiode .xml. There is a button to do this ("Attach metadata to file") and there are also visanalysis modules & scripts to do it as well.
-- Keep an eye on the terminal window running the GUI, as it sometimes prints useful or informative things. Especially when it crashes.
 

@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from visanalysis import plugin
 import sys
 import os
+
+from visanalysis.plugin import base as base_plugin
 
 experiment_filepath = sys.argv[1]
 data_directory = sys.argv[2]
@@ -10,11 +11,16 @@ rigID = sys.argv[3]
 
 
 if rigID == 'Bruker':
-    plug = plugin.bruker.BrukerPlugin()
+    from visanalysis.plugin import bruker
+    plug = bruker.BrukerPlugin()
+    print('****Bruker plugin****')
 elif rigID == 'AODscope':
-    plug = plugin.aodscope.AodScopePlugin()
+    from visanalysis.plugin import aodscope
+    plug = aodscope.AodScopePlugin()
+    print('****AODscope plugin****')
 else:
-    plug = plugin.base.BasePlugin()
+    plug = base_plugin.BasePlugin()
+    print('****Unrecognized plugin name****')
 
 experiment_file_name = os.path.split(experiment_filepath)[-1].split('.')[0]
 

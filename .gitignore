@@ -116,6 +116,7 @@ dmypy.json
 # visanalysis config file
 *config.yaml
 
-scratch.py
-
+# Example data
 */example_data
+
+# scratch.py

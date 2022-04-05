@@ -1,32 +1,30 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Data file GUI and ROI drawer for visanalysis.
+Data file GUI and ROI drawer.
 
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
 """
+import os
+import psutil
 import sys
+
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import path
-import seaborn as sns
+import matplotlib.colors as mcolors
 from matplotlib.widgets import LassoSelector, EllipseSelector
 import matplotlib.cm as cm
-from PyQt5.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
+from PyQt6.QtWidgets import (QPushButton, QWidget, QLabel, QGridLayout,
                              QApplication, QComboBox, QLineEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QSlider,
                              QMessageBox, QTreeWidget, QTreeWidgetItem)
-import PyQt5.QtCore as QtCore
-import PyQt5.QtGui as QtGui
+import PyQt6.QtCore as QtCore
+import PyQt6.QtGui as QtGui
 import numpy as np
-import os
 
-from visanalysis import plugin
-from visanalysis.util import plot_tools
-
-import psutil
+from visanalysis.util import plot_tools, h5io
 
 
 class DataGUI(QWidget):
@@ -44,7 +42,7 @@ class DataGUI(QWidget):
 
         self.current_roi_index = 0
         self.current_z_slice = 0
-        self.current_channel = 1 # index
+        self.current_channel = 1  # index
         self.image_series_name = ''
         self.series_number = None
         self.roi_response = []
@@ -55,7 +53,7 @@ class DataGUI(QWidget):
 
         self.blank_image = np.zeros((1, 1))
 
-        self.colors = sns.color_palette("deep", n_colors=20)
+        self.colors = [mcolors.to_rgb(x) for x in list(mcolors.TABLEAU_COLORS)[:20]]
 
         self.initUI()
 
@@ -147,13 +145,13 @@ class DataGUI(QWidget):
         item.setFont(font)
         item.setBackground(QtGui.QColor(121, 121, 121))
         brush = QtGui.QBrush(QtGui.QColor(91, 91, 91))
-        brush.setStyle(QtCore.Qt.SolidPattern)
+        brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
         item.setForeground(brush)
         self.tableAttributes.setHorizontalHeaderItem(0, item)
         item = QTableWidgetItem()
         item.setBackground(QtGui.QColor(123, 123, 123))
         brush = QtGui.QBrush(QtGui.QColor(91, 91, 91))
-        brush.setStyle(QtCore.Qt.SolidPattern)
+        brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
         item.setForeground(brush)
         self.tableAttributes.setHorizontalHeaderItem(1, item)
         self.tableAttributes.horizontalHeader().setCascadingSectionResizes(True)
@@ -217,21 +215,25 @@ class DataGUI(QWidget):
         self.roi_control_grid.addWidget(self.deleteROIButton, 2, 0)
 
         # Current roi slider
-        self.roiSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.roiSlider = QSlider(QtCore.Qt.Orientation.Horizontal, self)
         self.roiSlider.setMinimum(0)
         self.roiSlider.setMaximum(self.max_rois)
         self.roiSlider.valueChanged.connect(self.sliderUpdated)
         self.roi_control_grid.addWidget(self.roiSlider, 2, 1, 1, 1)
 
-        plt.rc_context({'axes.edgecolor': 'white',
-                        'xtick.color': 'white',
-                        'ytick.color': 'white',
-                        'figure.facecolor': 'black',
-                        'axes.facecolor': 'black'})
-        self.responseFig = plt.figure()
-        self.responsePlot = self.responseFig.add_subplot(111)
-        self.responseFig.subplots_adjust(left=0.05, bottom=0.20, top=0.95, right=0.98)
-        self.responseCanvas = FigureCanvas(self.responseFig)
+        ctx = plt.rc_context({'xtick.major.size': 1,
+                              'axes.spines.top': False,
+                              'axes.spines.right': False,
+                              'xtick.labelsize': 'xx-small',
+                              'ytick.labelsize': 'xx-small',
+                              'xtick.major.size': 1.0,
+                              'ytick.major.size': 1.0,
+                              'xtick.major.pad': 1.0,
+                              'ytick.major.pad': 1.0})
+        with ctx:
+            self.responseFig = plt.figure(frameon=False, layout='constrained')
+            self.responsePlot = self.responseFig.add_subplot(111)
+            self.responseCanvas = FigureCanvas(self.responseFig)
         self.responseCanvas.draw_idle()
         self.plot_grid.addWidget(self.responseCanvas, 0, 0)
 
@@ -249,7 +251,7 @@ class DataGUI(QWidget):
         self.plot_grid.setRowStretch(2, 3)
 
         # Current z slice slider
-        self.zSlider = QSlider(QtCore.Qt.Horizontal, self)
+        self.zSlider = QSlider(QtCore.Qt.Orientation.Horizontal, self)
         self.zSlider.setMinimum(0)
         self.zSlider.setMaximum(50)
         self.zSlider.setValue(0)
@@ -294,7 +296,7 @@ class DataGUI(QWidget):
 
     def onTreeItemClicked(self, item, column):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         self.clearRois()
         self.series_number = None
         if 'series_' in group_path:
@@ -303,47 +305,50 @@ class DataGUI(QWidget):
                 self.plugin.updateImagingDataObject(self.experiment_file_directory, self.experiment_file_name, self.series_number)
             # look for image_file_name or ask user to select it
             if self.data_directory is not None:
-                image_file_name = plugin.base.readImageFileName(file_path, self.series_number)
+                image_file_name = h5io.readImageFileName(file_path, self.series_number)
                 if image_file_name is None or image_file_name == '':
                     image_file_path, _ = QFileDialog.getOpenFileName(self, "Select image file")
                     print('User selected image file at {}'.format(image_file_path))
                     image_file_name = os.path.split(image_file_path)[-1]
                     self.data_directory = os.path.split(image_file_path)[:-1][0]
-                    plugin.base.attachImageFileName(file_path, self.series_number, image_file_name)
+                    h5io.attachImageFileName(file_path, self.series_number, image_file_name)
                     print('Attached image_file_name {} to series {}'.format(image_file_name, self.series_number))
                     print('Data directory is {}'.format(self.data_directory))
 
                 self.image_file_name = image_file_name
                 self.currentImageFileNameLabel.setText(self.image_file_name)
 
+        else:  # clicked part of the tree upstream of any series
+            self.series_number = None
+
         if item.parent() is not None:
-            if item.parent().text(column) == 'rois': # selected existing roi group
+            if item.parent().text(column) == 'rois':  # selected existing roi group
                 roi_set_name = item.text(column)
                 # print('Selected roi set {} from series {}'.format(roi_set_name, self.series_number))
                 self.le_roiSetName.setText(roi_set_name)
-                roi_set_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+                roi_set_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
                 self.loadRois(roi_set_path)
                 self.redrawRoiTraces()
 
         if group_path != '':
-            attr_dict = plugin.base.getAttributesFromGroup(file_path, group_path)
-            if 'series' in group_path.split('/')[-1]:
-                editable_values = False  # don't let user edit epoch parameters
-            else:
-                editable_values = True
+            attr_dict = h5io.getAttributesFromGroup(file_path, group_path)
+            editable_values = True  # user can edit metadata
             self.populate_attrs(attr_dict=attr_dict, editable_values=editable_values)
 
         # show roi image
-        if self.series_number is not None:
+        if self.series_number is not None:  # Clicked on node of the tree associated with a single series
             if self.data_directory is not None:  # user has selected a raw data directory
-                self.plugin.updateImageSeries(data_directory=self.data_directory,
-                                              image_file_name=self.image_file_name,
-                                              series_number=self.series_number,
-                                              channel=self.current_channel)
-                self.roi_image = self.plugin.mean_brain
-                self.zSlider.setValue(0)
-                self.zSlider.setMaximum(self.roi_image.shape[2]-1)
-                self.redrawRoiTraces()
+                if self.plugin.dataIsAttached(file_path, self.series_number):
+                    self.plugin.updateImageSeries(data_directory=self.data_directory,
+                                                  image_file_name=self.image_file_name,
+                                                  series_number=self.series_number,
+                                                  channel=self.current_channel)
+                    self.roi_image = self.plugin.mean_brain
+                    self.zSlider.setValue(0)
+                    self.zSlider.setMaximum(self.roi_image.shape[2]-1)
+                    self.redrawRoiTraces()
+                else:
+                    print('Attach metadata to file before drawing rois')
 
             else:
                 print('Select a data directory before drawing rois')
@@ -402,14 +407,16 @@ class DataGUI(QWidget):
 
     def initializeDataAnalysis(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        data_type = plugin.base.getDataType(file_path)
+        data_type = h5io.getDataType(file_path)
         # Load plugin based on Rig name in hdf5 file
         if data_type == 'Bruker':
-            self.plugin = plugin.bruker.BrukerPlugin()
+            from visanalysis.plugin import bruker
+            self.plugin = bruker.BrukerPlugin()
         elif data_type == 'AODscope':
-            self.plugin = plugin.aodscope.AodScopePlugin()
+            from visanalysis.plugin import aodscope
+            self.plugin = aodscope.AodScopePlugin()
         else:
-            self.plugin = plugin.base.BasePlugin()
+            self.plugin = h5io.BasePlugin()
 
         self.plugin.parent_gui = self
 
@@ -434,7 +441,7 @@ class DataGUI(QWidget):
         print('User selected image file at {}'.format(image_file_path))
         self.image_file_name = os.path.split(image_file_path)[-1]
         self.data_directory = os.path.split(image_file_path)[:-1][0]
-        plugin.base.attachImageFileName(file_path, self.series_number, self.image_file_name)
+        h5io.attachImageFileName(file_path, self.series_number, self.image_file_name)
         print('Attached image_file_name {} to series {}'.format(self.image_file_name, self.series_number))
         print('Data directory is {}'.format(self.data_directory))
 
@@ -456,15 +463,16 @@ class DataGUI(QWidget):
 
     def deleteSelectedGroup(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
         group_name = group_path.split('/')[-1]
 
         buttonReply = QMessageBox.question(self,
                                            'Delete series',
                                            "Are you sure you want to delete group {}?".format(group_name),
-                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if buttonReply == QMessageBox.Yes:
-            plugin.base.deleteGroup(file_path=file_path,
+                                           QMessageBox.StandardButton.Yes |
+                                           QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if buttonReply == QMessageBox.StandardButton.Yes:
+            h5io.deleteGroup(file_path=file_path,
                                     group_path=group_path)
             print('Deleted group {}'.format(group_name))
             self.updateExistingRoiSetList()
@@ -474,12 +482,12 @@ class DataGUI(QWidget):
 
     def populateGroups(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        self.group_dset_dict = plugin.base.getHierarchy(file_path)
+        self.group_dset_dict = h5io.getHierarchy(file_path)
         self._populateTree(self.groupTree, self.group_dset_dict)
 
     def populate_attrs(self, attr_dict=None, editable_values=False):
         """Populate attribute for currently selected group."""
-        self.tableAttributes.blockSignals(True) # block udpate signals for auto-filled forms
+        self.tableAttributes.blockSignals(True)  # block udpate signals for auto-filled forms
         self.tableAttributes.setRowCount(0)
         self.tableAttributes.setColumnCount(2)
         self.tableAttributes.setSortingEnabled(False)
@@ -488,30 +496,30 @@ class DataGUI(QWidget):
             for num, key in enumerate(attr_dict):
                 self.tableAttributes.insertRow(self.tableAttributes.rowCount())
                 key_item = QTableWidgetItem(key)
-                key_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                key_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 0, key_item)
 
                 val_item = QTableWidgetItem(str(attr_dict[key]))
                 if editable_values:
-                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled)
+                    val_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEditable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 else:
-                    val_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                    val_item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.tableAttributes.setItem(num, 1, val_item)
 
         self.tableAttributes.blockSignals(False)
 
     def update_attrs_to_file(self, item):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
-        group_path = plugin.base.getPathFromTreeItem(self.groupTree.selectedItems()[0])
+        group_path = h5io.getPathFromTreeItem(self.groupTree.selectedItems()[0])
 
         attr_key = self.tableAttributes.item(item.row(), 0).text()
         attr_val = item.text()
 
         # update attr in file
-        plugin.base.changeAttribute(file_path=file_path,
-                                    group_path=group_path,
-                                    attr_key=attr_key,
-                                    attr_val=attr_val)
+        h5io.changeAttribute(file_path=file_path,
+                             group_path=group_path,
+                             attr_key=attr_key,
+                             attr_val=attr_val)
         print('Changed attr {} to = {}'.format(attr_key, attr_val))
 
 # %% # # # # # # # # ROI SELECTOR WIDGET # # # # # # # # # # # # # # # # # # #
@@ -528,6 +536,7 @@ class DataGUI(QWidget):
             init_lasso = True
         else:
             self.roi_ax.imshow(self.blank_image)
+        self.roi_ax.set_axis_off()
 
         self.roi_canvas.draw()
 
@@ -558,7 +567,7 @@ class DataGUI(QWidget):
 
     def keyPressEvent(self, event):
         if type(event) == QtGui.QKeyEvent:
-            if np.any([event.key() == QtCore.Qt.Key_Return, event.key() == QtCore.Qt.Key_Enter]):
+            if np.any([event.key() == QtCore.Qt.Key.Key_Return, event.key() == QtCore.Qt.Key.Key_Enter]):
                 if len(self.roi_path_list) > 0:
                     event.accept()
                     self.updateRoiSelection(self.roi_path_list)
@@ -612,14 +621,15 @@ class DataGUI(QWidget):
         if self.roi_image is not None:
             self.refreshLassoWidget(keep_paths=True)
 
-
     def redrawRoiTraces(self):
-        self.responsePlot.clear()
+        self.clearRoiArtists()
         if self.current_roi_index < len(self.roi_response):
             current_raw_trace = np.squeeze(self.roi_response[self.current_roi_index])
             fxn_name = self.RoiResponseTypeComboBox.currentText()
             display_trace = getattr(self.plugin, 'getRoiResponse_{}'.format(fxn_name))([current_raw_trace])
             self.responsePlot.plot(display_trace, color=self.colors[self.current_roi_index], linewidth=1, alpha=0.5)
+            self.responsePlot.set_xlim([0, len(display_trace)])
+            self.responsePlot.set_ylim([display_trace.min(), display_trace.max()])
         self.responseCanvas.draw()
 
         self.refreshLassoWidget(keep_paths=False)
@@ -636,12 +646,13 @@ class DataGUI(QWidget):
     def saveRois(self):
         file_path = os.path.join(self.experiment_file_directory, self.experiment_file_name + '.hdf5')
         roi_set_name = self.le_roiSetName.text()
-        if roi_set_name in plugin.base.getAvailableRoiSetNames(file_path, self.series_number):
+        if roi_set_name in h5io.getAvailableRoiSetNames(file_path, self.series_number):
             buttonReply = QMessageBox.question(self,
                                                'Overwrite roi set',
                                                "Are you sure you want to overwrite roi set: {}?".format(roi_set_name),
-                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if buttonReply == QMessageBox.Yes:
+                                               QMessageBox.StandardButton.Yes |
+                                               QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if buttonReply == QMessageBox.StandardButton.Yes:
                 self.plugin.saveRoiSet(file_path,
                                        series_number=self.series_number,
                                        roi_set_name=roi_set_name,
@@ -679,9 +690,13 @@ class DataGUI(QWidget):
         self.roi_response = []
         self.roi_path = []
         self.roi_image = None
-        self.responsePlot.clear()
+        self.clearRoiArtists()
         self.redrawRoiTraces()
         self.roi_ax.clear()
+
+    def clearRoiArtists(self):
+        for artist in self.responsePlot.lines + self.responsePlot.collections:
+            artist.remove()
 
     def selectRoiType(self):
         self.roi_type = self.RoiTypeComboBox.currentText().split(':')[0]
@@ -698,4 +713,4 @@ class DataGUI(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = DataGUI()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

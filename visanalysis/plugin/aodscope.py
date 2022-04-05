@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Created on Fri May 31 09:43:59 2019
+AODscope / Karthala plugin.
 
-@author: mhturner
+https://github.com/ClandininLab/visanalysis
+mhturner@stanford.edu
 """
 import os
 import xml.etree.ElementTree as ET
@@ -10,14 +10,13 @@ import numpy as np
 from matplotlib import path
 import h5py
 import skimage.io as io
-from tifffile import imsave
 import functools
 from nptdms import TdmsFile
 import configparser
 import glob
 
-from visanalysis import plugin
-from visanalysis.util import plot_tools
+from visanalysis.plugin import base as base_plugin
+from visanalysis.util import plot_tools, h5io
 
 ##############################################################################
 # Functions for random access poi data from AODscope / Karthala
@@ -27,7 +26,7 @@ from visanalysis.util import plot_tools
 # TODO: PMT 1 or 2 selection
 
 
-class AodScopePlugin(plugin.base.BasePlugin):
+class AodScopePlugin(base_plugin.BasePlugin):
     def __init__(self):
         super().__init__()
 
@@ -199,9 +198,9 @@ class AodScopePlugin(plugin.base.BasePlugin):
             poi_scan = acquisition_group.attrs.get('poi_scan', True)
             current_roi_group = parent_roi_group.require_group(roi_set_name)
 
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
-            plugin.base.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
+            h5io.overwriteDataSet(current_roi_group, 'roi_mask', roi_mask)
+            h5io.overwriteDataSet(current_roi_group, 'roi_response', roi_response)
+            h5io.overwriteDataSet(current_roi_group, 'roi_image', roi_image)
 
             for dataset_key in current_roi_group.keys():
                 if 'path_vertices' in dataset_key:
@@ -216,7 +215,7 @@ class AodScopePlugin(plugin.base.BasePlugin):
                     poi_numbers.append(getPoiNumbersFromPath(roi_paths, poi_locations))
                 for p_ind, p in enumerate(roi_paths):  # for path objects within a roi index (for appended, noncontiguous rois)
                     current_roi_path_group = current_roi_index_group.require_group('subpath_{}'.format(p_ind))
-                    plugin.base.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
+                    h5io.overwriteDataSet(current_roi_path_group, 'path_vertices', p.vertices)
 
             if poi_scan:
                 current_roi_group.attrs['poi_numbers'] = np.hstack(poi_numbers)
@@ -267,14 +266,14 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
                 # make sure subgroups exist for stimulus and response timing
                 stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
-                plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                h5io.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                 stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                 acquisition_group = epoch_run_group.require_group('acquisition')
-                plugin.base.overwriteDataSet(acquisition_group, 'time_points', poi_data['time_points'])
-                plugin.base.overwriteDataSet(acquisition_group, 'poi_data_matrix', poi_data['poi_data_matrix'])
-                plugin.base.overwriteDataSet(acquisition_group, 'poi_xy', poi_data['poi_xy'])
+                h5io.overwriteDataSet(acquisition_group, 'time_points', poi_data['time_points'])
+                h5io.overwriteDataSet(acquisition_group, 'poi_data_matrix', poi_data['poi_data_matrix'])
+                h5io.overwriteDataSet(acquisition_group, 'poi_xy', poi_data['poi_xy'])
 
                 n_pts = float(metadata['random acess 2']['nbr of point'].replace('"',''))
                 for outer_k in metadata.keys():
@@ -285,8 +284,8 @@ class AodScopePlugin(plugin.base.BasePlugin):
                             sample_period = (pt_per/1e6)*n_pts  # sec per cycle (all pois)
                             acquisition_group.attrs['sample_period'] = sample_period  # sec per cycle (all pois)
 
-                plugin.base.overwriteDataSet(acquisition_group, "poi_locations", poi_data['poi_locations'])
-                plugin.base.overwriteDataSet(acquisition_group, "snap_image", poi_data['snap_image'])
+                h5io.overwriteDataSet(acquisition_group, "poi_locations", poi_data['poi_locations'])
+                h5io.overwriteDataSet(acquisition_group, "snap_image", poi_data['snap_image'])
 
             print('Attached poi data to series {}'.format(series_number))
 
@@ -320,12 +319,12 @@ class AodScopePlugin(plugin.base.BasePlugin):
 
                 # make sure subgroups exist for stimulus and response timing
                 stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                plugin.base.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
-                plugin.base.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
+                h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                h5io.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                 stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
                 acquisition_group = epoch_run_group.require_group('acquisition')
-                plugin.base.overwriteDataSet(acquisition_group, 'time_points', response_timing['time_points'])
+                h5io.overwriteDataSet(acquisition_group, 'time_points', response_timing['time_points'])
                 acquisition_group.attrs['sample_period'] = response_timing['sample_period']
 
                 for outer_k in metadata.keys():
@@ -338,13 +337,13 @@ class AodScopePlugin(plugin.base.BasePlugin):
         poi_name = 'points' + ('0000' + str(poi_series_number))[-4:]
         full_file_path = os.path.join(data_directory, 'points', poi_name, poi_name + '_pmt' + str(pmt) + '.tdms')
 
-        try:
+        if os.path.exists(full_file_path):
             tdms_file = TdmsFile(full_file_path)
             time_points = tdms_file.channel_data('PMT'+str(pmt), 'POI time') / 1e3  # msec -> sec
             poi_data_matrix = np.ndarray(shape=(len(tdms_file.group_channels('PMT'+str(pmt))[1:]), len(time_points)))
             poi_data_matrix[:] = np.nan
 
-            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])): # first object is time points. Subsequent for POIs
+            for poi_ind in range(len(tdms_file.group_channels('PMT'+str(pmt))[1:])):  # first object is time points. Subsequent for POIs
                 poi_data_matrix[poi_ind, :] = tdms_file.channel_data('PMT'+str(pmt), 'POI ' + str(poi_ind) + ' ')
 
             # get poi locations in raw coordinates:
@@ -369,17 +368,18 @@ class AodScopePlugin(plugin.base.BasePlugin):
                                                                          snap_name,
                                                                          poi_xy,
                                                                          pmt=1)
-        except:
-            time_points = None
-            poi_data_matrix = None
-            print('No tdms file found at: ' + full_file_path)
+            results_dict = {'time_points': time_points,
+                            'poi_data_matrix': poi_data_matrix,
+                            'poi_xy': poi_xy,
+                            'snap_image': snap_image,
+                            'snap_settings': snap_settings,
+                            'poi_locations': poi_locations}
 
-        return {'time_points': time_points,
-                'poi_data_matrix': poi_data_matrix,
-                'poi_xy': poi_xy,
-                'snap_image': snap_image,
-                'snap_settings': snap_settings,
-                'poi_locations': poi_locations}
+        else:
+            results_dict = {}
+
+
+        return results_dict
 
     def getXytData(self, data_directory, xyt_series_number, pmt=1):
         stack_dir = glob.glob(os.path.join(data_directory, 'stack', 'stack') + ('0000' + str(xyt_series_number))[-4:] + '*/')[0]

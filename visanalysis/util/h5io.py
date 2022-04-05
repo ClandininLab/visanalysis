@@ -9,6 +9,15 @@ import numpy as np
 import functools
 
 
+def updateSeriesAttribute(file_path, series_number,
+                          attr_key, attr_val):
+    """User facing, compared to  changeAttribute"""
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        epoch_run_group.attrs[attr_key] = attr_val
+
+        
 def deleteGroup(file_path, group_path):
     group_name = group_path.split('/')[-1]
     with h5py.File(file_path, 'r+') as experiment_file:
