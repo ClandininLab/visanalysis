@@ -14,6 +14,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import scipy.signal as signal
+import warnings
 
 from visanalysis.util import plot_tools, h5io
 
@@ -93,17 +94,18 @@ class ImagingDataObject():
 
     def getEpochParameterDicts(self, target_keys=None):
         """
-        Gets epoch parameters that change each epoch within a run.
-
-            Looks for epoch params with "current" or "component" in them,
-            as in, "current_intensity"
+        Gets epoch parameter dicts for selected target_keys
 
             returns: list of epoch parameter dicts
 
         """
         stim_dicts = []
         for ep in self.getEpochParameters():
-            new_keys = [key for key in ep.keys() if 'current' in key or 'component' in key]
+            if target_keys is None:  # Default: any params with "current" or "component" in them, as in "current_intensity"
+                new_keys = [key for key in ep.keys() if 'current' in key or 'component' in key]
+            else:
+                new_keys = target_keys
+
             new_dict = {new_key: ep.get(new_key) for new_key in new_keys}
             stim_dicts.append(new_dict)
 
@@ -155,28 +157,28 @@ class ImagingDataObject():
 
         return acquisition_metadata
 
-    def getPhotodiodeData(self):
+    def getVoltageData(self):
         """
-        Get photodiode trace data.
+        Get voltage trace data.
 
         Returns:
-            photodiode_trace: array, shape=(n photodiode channels, n time points)
-            photodiode_time_vector: array
-            photodiode_sample_rate: (Hz)
+            voltage_trace: array, shape=(n voltage channels, n time points)
+            voltage_time_vector: array
+            voltage_sample_rate: (Hz)
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             stimulus_timing_group = epoch_run_group['stimulus_timing']
 
-            photodiode_trace = stimulus_timing_group.get('frame_monitor')[:]
-            if len(photodiode_trace.shape) < 2:
+            voltage_trace = stimulus_timing_group.get('frame_monitor')[:]
+            if len(voltage_trace.shape) < 2:
                 # dummy dim for single channel photodiode
-                photodiode_trace = photodiode_trace[np.newaxis, :]
-            photodiode_time_vector = stimulus_timing_group.get('time_vector')[:]
-            photodiode_sample_rate = stimulus_timing_group.attrs['sample_rate']
+                voltage_trace = voltage_trace[np.newaxis, :]
+            voltage_time_vector = stimulus_timing_group.get('time_vector')[:]
+            voltage_sample_rate = stimulus_timing_group.attrs['sample_rate']
 
-        return photodiode_trace, photodiode_time_vector, photodiode_sample_rate
+        return voltage_trace, voltage_time_vector, voltage_sample_rate
 
     def getResponseTiming(self):
         """
@@ -208,9 +210,13 @@ class ImagingDataObject():
 
 
         """
-        frame_monitor_channels, time_vector, sample_rate = self.getPhotodiodeData()
+        frame_monitor_channels, time_vector, sample_rate = self.getVoltageData()
         run_parameters = self.getRunParameters()
         epoch_parameters = self.getEpochParameters()
+
+        # If more than two voltage channels, just take the LAST two in the list as photodiodes
+        if len(frame_monitor_channels) > 2:
+            frame_monitor_channels = frame_monitor_channels[-2:]
 
         if len(frame_monitor_channels.shape) == 1:
             frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
@@ -310,7 +316,7 @@ class ImagingDataObject():
                 print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
                 print('==========================================================')
 
-        # for stimulus_timing just use one of the channels, both *should* be in sync
+        # for stimulus_timing just use the last of the channels
         stimulus_timing = {'stimulus_end_times': stimulus_end_times,
                            'stimulus_start_times': stimulus_start_times,
                            'dropped_frame_times': dropped_frame_times,
@@ -431,9 +437,12 @@ class ImagingDataObject():
 
             if dff:
                 # calculate baseline using pre frames
+
                 baseline = np.mean(new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True)
                 # to dF/F
-                new_resp_chunk = (new_resp_chunk - baseline) / baseline
+                with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    new_resp_chunk = (new_resp_chunk - baseline) / baseline
 
             try:
                 response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
@@ -464,11 +473,15 @@ class ImagingDataObject():
                 (len=n_stimuli) of trial responses for each stim condition, each shape = (n_regions x trials x time)
 
         """
-
         if parameter_key is None:
             parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
+            # print(parameter_values)
+            # print('a')
             unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
-        elif type(parameter_key) is dict:  # for composite stims like panglom suite
+            # print('b')
+            # print(unique_parameter_values)
+
+        elif type(parameter_key) is dict:  # for composite stims, where parameter keys aren't the same for all epochs
             epoch_parameters = self.getEpochParameters()
             parameter_values = []
             for ind_e, ep in enumerate(epoch_parameters):
@@ -480,15 +493,12 @@ class ImagingDataObject():
 
                 parameter_values.append(e_params)
             unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
-        elif type(parameter_key) is tuple:  # Tuple of multiple param keys
-            parameter_values = np.vstack([self.getEpochParameters(x) for x in parameter_key]).T
-            unique_parameter_values = np.unique(parameter_values, axis=0)
-        elif type(parameter_key) is str:  # single param key
-            parameter_values = self.getEpochParameters(parameter_key)
-            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
-        else:
-            print('Unrecognized parameter_key')
-            return
+        else:  # Same parameter keys for each epoch
+            if type(parameter_key) is str:  # single param key, list-ify
+                parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=[parameter_key])]
+            else:
+                parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
+            unique_parameter_values = np.unique(np.array(parameter_values), axis=0)
 
         n_stimuli = len(unique_parameter_values)
         n_regions, n_trials, t_dim = epoch_response_matrix.shape
@@ -505,8 +515,10 @@ class ImagingDataObject():
                 print('Epoch(s) {} not included in epoch_response_matrix'.format(pull_inds[tmp]))
                 pull_inds = pull_inds[pull_inds < epoch_response_matrix.shape[1]]
 
-            mean_response[:, p_ind, :] = np.nanmean(epoch_response_matrix[:, pull_inds, :], axis=1)
-            sem_response[:, p_ind, :] = np.nanstd(epoch_response_matrix[:, pull_inds, :], axis=1) / np.sqrt(len(pull_inds))
+            with warnings.catch_warnings():  # Warning if nanmean run on an axis with ALL nans
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                mean_response[:, p_ind, :] = np.nanmean(epoch_response_matrix[:, pull_inds, :], axis=1)
+                sem_response[:, p_ind, :] = np.nanstd(epoch_response_matrix[:, pull_inds, :], axis=1) / np.sqrt(len(pull_inds))
             trial_response_by_stimulus.append(epoch_response_matrix[:, pull_inds, :])
 
         return unique_parameter_values, mean_response, sem_response, trial_response_by_stimulus
