@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='visanalysis',
-    version='2.0.0',
+    version='2.0.1',
     description='Analysis environment for visprotocol experiments',
     url='https://github.com/ClandininLab/visanalysis',
     author='Max Turner',
