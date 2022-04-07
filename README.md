@@ -9,11 +9,14 @@ Contact: Max Turner, mhturner@stanford.edu
 
 ### Dependencies
 - PyQT6 is required for the GUI (optional)
-- [ANTsPy](https://github.com/ANTsX/ANTsPy) is required for all image registration functions. To install ANTsPy:
-
-    `pip install antspyx`
 
 ### Install visanalysis
+It helps to start with a fresh conda environment. But this is not strictly necessary.
+
+`conda create -n visanalysis python=3.9`
+
+`conda activate visanalysis`
+
 1. **GUI-free:** To install the basic, GUI-free version. cd to top-level visanalysis/, where setup.py lives, and run:
   
     `pip install -e .`
