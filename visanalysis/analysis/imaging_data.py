@@ -486,12 +486,8 @@ class ImagingDataObject():
         # Get unique parameter combinations
         unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
 
-        # Try to sort unique_parameter_values into some sensible ordering
-        is_ragged = len(set([len(upv) for upv in unique_parameter_values])) > 1
-        if is_ragged:
-            unique_parameter_values = np.sort(np.array(unique_parameter_values, dtype='object'))
-        else:
-            unique_parameter_values = np.sort(unique_parameter_values, axis=0)
+        # Sort unique_parameter_values into some sensible ordering
+        unique_parameter_values.sort()
 
         # Get epoch indices for each unique parameter combination
         epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
