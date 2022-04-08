@@ -104,7 +104,7 @@ class ImagingDataObject():
             if target_keys is None:  # Default: any params with "current" or "component" in them, as in "current_intensity"
                 new_keys = [key for key in ep.keys() if 'current' in key or 'component' in key]
             else:
-                new_keys = target_keys
+                new_keys = [key for key in target_keys if key in ep.keys()]
 
             new_dict = {new_key: ep.get(new_key) for new_key in new_keys}
             stim_dicts.append(new_dict)
@@ -455,6 +455,9 @@ class ImagingDataObject():
         response_matrix = np.delete(response_matrix, cut_inds, axis=1)  # shape = (region, trial, time)
         return time_vector, response_matrix
 
+# # # #  # # # # # # # # # CONVENIENCE METHODS # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
     def getTrialAverages(self, epoch_response_matrix, parameter_key=None):
         """
         getTrialAverages(self, epoch_response_matrix, parameter_key=None)
@@ -462,55 +465,51 @@ class ImagingDataObject():
         Params:
             -epoch_response: ndarray, shape = (rois, epochs, time)
             -parameter_key:
-                -None (default): conditions on any parameter containing "current" or "component"
+                -None (default): conditions on any parameter(s) containing "current" or "component"
                 -string: name of a single protocol parameter you want to split on
-                -dict: keys are component_stim_type and values are lists of parameter names for that component stim
-
+                -List of strings: multiple params to split on
         Returns:
+            unique_parameter_values: unique combinations of param values, in the order given by
+                parameter_key, that corresponds to the response results
             mean_response: ndarray, trial-average responses, shape = (n_regions x stim condition x time)
             sem_response: ndarray, trial-S.E.M. responses, shape = (n_regions x stim condition x time)
             trial_response_by_stimulus: list of ndarrays
                 (len=n_stimuli) of trial responses for each stim condition, each shape = (n_regions x trials x time)
 
         """
-        if parameter_key is None:
-            parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts()]
-            # print(parameter_values)
-            # print('a')
-            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
-            # print('b')
-            # print(unique_parameter_values)
 
-        elif type(parameter_key) is dict:  # for composite stims, where parameter keys aren't the same for all epochs
-            epoch_parameters = self.getEpochParameters()
-            parameter_values = []
-            for ind_e, ep in enumerate(epoch_parameters):
-                component_stim_type = ep.get('component_stim_type')
-                e_params = [component_stim_type]
-                param_keys = parameter_key[component_stim_type]
-                for pk in param_keys:
-                    e_params.append(ep.get(pk))
+        if parameter_key is not None:
+            if type(parameter_key) is str:  # single param key
+                parameter_key = [parameter_key]  # list-ify
+        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
 
-                parameter_values.append(e_params)
-            unique_parameter_values = np.unique(np.array(parameter_values, dtype='object'))
-        else:  # Same parameter keys for each epoch
-            if type(parameter_key) is str:  # single param key, list-ify
-                parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=[parameter_key])]
-            else:
-                parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
-            unique_parameter_values = np.unique(np.array(parameter_values), axis=0)
+        # Get unique parameter combinations
+        unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
+
+        # Try to sort unique_parameter_values into some sensible ordering
+        is_ragged = len(set([len(upv) for upv in unique_parameter_values])) > 1
+        if is_ragged:
+            unique_parameter_values = np.sort(np.array(unique_parameter_values, dtype='object'))
+        else:
+            unique_parameter_values = np.sort(unique_parameter_values, axis=0)
+
+        # Get epoch indices for each unique parameter combination
+        epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
 
         n_stimuli = len(unique_parameter_values)
         n_regions, n_trials, t_dim = epoch_response_matrix.shape
 
         mean_response = np.ndarray(shape=(n_regions, n_stimuli, t_dim))  # n_regions x stim condition x time
         sem_response = np.ndarray(shape=(n_regions, n_stimuli, t_dim))  # n_regions x stim condition x time
+        mean_response[:] = np.nan
+        sem_response[:] = np.nan
 
         trial_response_by_stimulus = []
         for p_ind, up in enumerate(unique_parameter_values):  # For distinct stimulus parameterizations
-            pull_inds = np.where([up == x for x in parameter_values])[0]  # trial indices matching this parameterization
+            pull_inds = epoch_inds[p_ind]  # trial indices matching this parameterization
 
-            if np.any(pull_inds >= epoch_response_matrix.shape[1]):
+            # Check to see if any epochs are not in the epoch_response_matrix. Possibly because of a cut-short recording
+            if np.any(np.array(pull_inds) >= epoch_response_matrix.shape[1]):
                 tmp = np.where(pull_inds >= epoch_response_matrix.shape[1])[0]
                 print('Epoch(s) {} not included in epoch_response_matrix'.format(pull_inds[tmp]))
                 pull_inds = pull_inds[pull_inds < epoch_response_matrix.shape[1]]
@@ -537,7 +536,6 @@ class ImagingDataObject():
         response_timing = self.getResponseTiming()
 
         pre_frames = int(run_parameters['pre_time'] / response_timing.get('sample_period'))
-        # stim_frames = int(run_parameters['stim_time'] / response_timing.get('sample_period'))
 
         if metric == 'max':
             response_amplitude = np.nanmax(epoch_response_matrix[..., pre_frames:], axis=-1)
