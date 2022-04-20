@@ -30,6 +30,9 @@ class BrukerPlugin(base_plugin.BasePlugin):
             self.loadImageSeries(data_directory=data_directory,
                                  image_file_name=image_file_name,
                                  channel=channel)
+            print('Loaded image series from {}:{}, channel {}'.format(data_directory, image_file_name, channel))
+        else:
+            print('Series already loaded from {}:{}, channel {}'.format(data_directory, image_file_name, channel))
 
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
         if series_number != self.current_series_number:
@@ -97,21 +100,19 @@ class BrukerPlugin(base_plugin.BasePlugin):
             if os.path.exists(metadata_filepath + '.xml'):
                 # Photodiode trace
                 v_rec_suffix = '_Cycle00001_VoltageRecording_001'
-                photodiode_basepath = os.path.join(data_directory, file_basename + v_rec_suffix)
-                frame_monitor, time_vector, sample_rate = getPhotodiodeSignal(photodiode_basepath)
+                voltage_basepath = os.path.join(data_directory, file_basename + v_rec_suffix)
+                voltage_recording, time_vector, sample_rate = getVoltageRecording(voltage_basepath)
+
+                # TODO: pick frame monitor(s) out of voltage recording traces based on name, or alt by input number
+                frame_monitor = voltage_recording
 
                 # Metadata & timing information
                 response_timing = getAcquisitionTiming(metadata_filepath)
                 metadata = getMetaData(metadata_filepath)
 
                 # # # # Attach metadata to epoch run group in data file # # #\
-                def find_series(name, obj, sn):
-                    target_group_name = 'series_{}'.format(str(sn).zfill(3))
-                    if target_group_name in name:
-                        return obj
-
                 with h5py.File(file_path, 'r+') as experiment_file:
-                    find_partial = functools.partial(find_series, sn=series_number)
+                    find_partial = functools.partial(h5io.find_series, sn=series_number)
                     epoch_run_group = experiment_file.visititems(find_partial)
 
                     # make sure subgroups exist for stimulus and response timing
@@ -203,11 +204,11 @@ class BrukerPlugin(base_plugin.BasePlugin):
     ###########################################################################
 
 
-def getPhotodiodeSignal(filepath):
+def getVoltageRecording(filepath):
     """
 
     params:
-        :filepath: path to photodiode file(s), with no suffix
+        :filepath: path to voltage recording file, with no suffix
     """
 
     metadata = ET.parse(filepath + '.xml')
