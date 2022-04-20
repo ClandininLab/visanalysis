@@ -17,7 +17,14 @@ def updateSeriesAttribute(file_path, series_number,
         epoch_run_group = experiment_file.visititems(find_partial)
         epoch_run_group.attrs[attr_key] = attr_val
 
-        
+
+def deleteSeriesAttribute(file_path, series_number, attr_key):
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        del epoch_run_group.attrs[attr_key]
+
+
 def deleteGroup(file_path, group_path):
     group_name = group_path.split('/')[-1]
     with h5py.File(file_path, 'r+') as experiment_file:
@@ -83,6 +90,18 @@ def overwriteDataSet(group, name, data):
     group.create_dataset(name, data=data)
 
 
+def readDataSet(file_path, series_number,
+                group_name,
+                dataset_name):
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        data_matrix = epoch_run_group[group_name].get(dataset_name)[:]
+        sample_rate = epoch_run_group[group_name].attrs['sample_rate']
+
+        return data_matrix, sample_rate
+
+
 def getDataType(file_path):
     with h5py.File(file_path, 'r+') as experiment_file:
         return experiment_file.attrs['rig']
@@ -92,6 +111,26 @@ def find_series(name, obj, sn):
     target_group_name = 'series_{}'.format(str(sn).zfill(3))
     if target_group_name in name:
         return obj
+
+
+def seriesExists(file_path, series_number):
+    with h5py.File(file_path, 'r+') as experiment_file:
+        find_partial = functools.partial(find_series, sn=series_number)
+        epoch_run_group = experiment_file.visititems(find_partial)
+        if epoch_run_group is None:
+            return False
+        else:
+            return True
+
+
+def createEpochRunGroup(file_path, fly_id, series_number):
+    if seriesExists(file_path, series_number):
+        print('Series {} already exists in {} - ABORTING'.format(series_number, file_path))
+    else:
+        with h5py.File(file_path, 'r+') as experiment_file:
+            fly_group = experiment_file['/Flies/{}/epoch_runs'.format(fly_id)]
+            fly_group.create_group('series_{}'.format(str(series_number).zfill(3)))
+            print('Added series {} to fly {} in {}'.format(series_number, fly_id, file_path))
 
 
 def getAvailableRoiSetNames(file_path, series_number):
