@@ -81,7 +81,12 @@ def plotRoiResponses(ImagingData, roi_name):
             plot_tools.addScaleBars(ax[r_ind], 1, 1, F_value=-0.1, T_value=-0.2)
 
 
-def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metadata={}, target_roi_series=[]):
+def filterDataFiles(data_directory,
+                    target_fly_metadata={},
+                    target_series_metadata={},
+                    target_roi_series=[],
+                    target_groups=[],
+                    quiet=False):
     """
     Searches through a directory of visprotocol datafiles and finds datafiles/series that match the search values
     Can search based on any number of fly metadata params or run parameters
@@ -91,16 +96,19 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
         -target_fly_metadata: (dict) key-value pairs of target parameters to search for in the fly metadata
         -target_series_metadata: (dict) key-value pairs of target parameters to search for in the series run (run parameters)
         -target_roi_series: (list) required roi_series names
+        -target_groups: (list) required names of groups under series group
 
     Returns
         -matching_series: List of matching series dicts with all fly & run params as well as file name and series number
     """
     fileNames = glob.glob(data_directory + "/*.hdf5")
-    print('Found {} files in {}'.format(len(fileNames), data_directory))
+    if not quiet:
+        print('Found {} files in {}'.format(len(fileNames), data_directory))
 
     # collect key/value pairs for all series in data directory
     all_series = []
     for ind, fn in enumerate(fileNames):
+
         with h5py.File(fn, 'r') as data_file:
             for fly in data_file.get('Flies'):
                 fly_metadata = {}
@@ -118,6 +126,8 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
 
                     existing_roi_sets = list(data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).get('rois').keys())
                     new_series['rois'] = existing_roi_sets
+                    existing_groups = list(data_file.get('Flies').get(fly).get('epoch_runs').get(epoch_run).keys())
+                    new_series['groups'] = existing_groups
 
                     all_series.append(new_series)
 
@@ -127,11 +137,12 @@ def filterDataFiles(data_directory, target_fly_metadata={}, target_series_metada
     for series in all_series:
         if checkAgainstTargetDict(match_dict, series):
             if np.all([r in series.get('rois') for r in target_roi_series]):
-                matching_series.append(series)
+                if np.all([r in series.get('groups') for r in target_groups]):
+                    matching_series.append(series)
 
     matching_series = sorted(matching_series, key=lambda d: d['file_name'] + '-' + str(d['series']).zfill(3))
-
-    print('Found {} matching series'.format(len(matching_series)))
+    if not quiet:
+        print('Found {} matching series'.format(len(matching_series)))
     return matching_series
 
 
@@ -151,7 +162,11 @@ def areValsTheSame(target_val, test_val):
     if isinstance(target_val, str):
         return target_val.casefold() == test_val.casefold()
     elif isinstance(target_val, bool):
+        if isinstance(test_val, str):
+            return str(target_val).casefold() == test_val.casefold()
+
         return target_val == test_val
+
     elif isinstance(target_val, (int, float)):  # Scalar
         if isinstance(test_val, (int, float)):
             return float(target_val) == float(test_val)  # Ignore type for int vs. float here
