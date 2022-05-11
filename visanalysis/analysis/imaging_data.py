@@ -444,11 +444,17 @@ class ImagingDataObject():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     new_resp_chunk = (new_resp_chunk - baseline) / baseline
 
-            try:
+            if epoch_frames > new_resp_chunk.shape[-1]:
+                print('Warnging: Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
+                response_matrix[:, idx, :new_resp_chunk.shape[-1]] = new_resp_chunk[:, 0:]
+            else:
                 response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
-            except:
-                print('Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
-                cut_inds = np.append(cut_inds, idx)
+            # except:
+            #     print('Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
+            #     print(response_matrix.shape)
+            #     print(new_resp_chunk.shape)
+            #     print(epoch_frames)
+                # cut_inds = np.append(cut_inds, idx)
 
         if len(cut_inds) > 0:
             print('Warning: cut {} epochs from epoch response matrix'.format(len(cut_inds)))
