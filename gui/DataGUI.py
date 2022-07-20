@@ -53,7 +53,7 @@ class DataGUI(QWidget):
 
         self.blank_image = np.zeros((1, 1))
 
-        self.colors = [mcolors.to_rgb(x) for x in list(mcolors.TABLEAU_COLORS)[:20]]
+        self.colors = [mcolors.to_rgb(x) for x in list(mcolors.XKCD_COLORS)[:self.max_rois]]
 
         self.initUI()
 
