@@ -11,7 +11,7 @@ mhturner@stanford.edu
 import h5py
 import numpy as np
 import functools
-from visanalysis.analysis import imaging_data
+from visanalysis.analysis import imaging_data, shared_analysis
 from visanalysis.util import h5io
 from matplotlib import path
 import os
@@ -183,6 +183,13 @@ class BasePlugin():
     def getRoiResponse_TrialAverage(self, roi_response):
         time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(np.vstack(roi_response), dff=False)
         trial_avg = np.mean(response_matrix, axis=(0, 1))
+        return trial_avg
+
+    def getRoiResponse_TrialAverageBright(self, roi_response):
+        time_vector, response_matrix = self.ImagingDataObject.getEpochResponseMatrix(np.vstack(roi_response), dff=False)
+        query = {'current_intensity': 1}
+        response_matrix_filt = shared_analysis.filterTrials(response_matrix, self.ImagingDataObject, query, return_inds=False)
+        trial_avg = np.mean(response_matrix_filt, axis=(0, 1))
         return trial_avg
 
     def getRoiResponse_TrialAverageDFF(self, roi_response):
