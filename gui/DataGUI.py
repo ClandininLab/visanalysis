@@ -190,6 +190,7 @@ class DataGUI(QWidget):
         self.RoiResponseTypeComboBox.addItem("TrialAverage")
         self.RoiResponseTypeComboBox.addItem("TrialResponses")
         self.RoiResponseTypeComboBox.addItem("TrialAverageDFF")
+        self.RoiResponseTypeComboBox.addItem("TrialAverageBright")
         self.roi_control_grid.addWidget(self.RoiResponseTypeComboBox, 2, 2)
 
         # ROIset file name line edit box

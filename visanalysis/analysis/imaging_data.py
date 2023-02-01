@@ -212,6 +212,24 @@ class ImagingDataObject():
 
             return response_timing
 
+    def getVolumeFrameOffsets(self):
+        """
+        For volumetric scans, return temporal offset for each z slice relative to frame_times
+        
+        returns: frame_offsets (sec), temporal sample offset for each z slice component of a volume
+        """
+        with h5py.File(self.file_path, 'r+') as experiment_file:
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
+            series_group = experiment_file.visititems(find_partial)
+            acquisition_group = series_group['acquisition']
+            frame_times = np.asarray(acquisition_group.get('frame_times'))
+        # initialize frame_offsets and populate
+        frame_offsets = np.zeros(frame_times.shape[1])
+        for frame_ind in range(0,frame_times.shape[1]):
+            # offsets are consitent for every single volume, so we only need to do this calculation once for each z-slice
+            frame_offsets[frame_ind] = frame_times[0,frame_ind]-frame_times[0,0]
+        return frame_offsets
+
     def getStimulusTiming(self,
                           plot_trace_flag=False):
         """
@@ -351,7 +369,7 @@ class ImagingDataObject():
 
         return roi_set_names
 
-    def getRoiResponses(self, roi_set_name, background_subtraction=False, roi_prefix='rois'):
+    def getRoiResponses(self, roi_set_name, background_subtraction=False, roi_prefix='rois', return_erm=True):
         """
         Get responses for indicated roi
         Params:
@@ -389,10 +407,10 @@ class ImagingDataObject():
 
             roi_data['roi_response'] = roi_data['roi_response'] - bg_roi_response
 
-        time_vector, response_matrix = self.getEpochResponseMatrix(np.vstack(roi_data.get('roi_response')))
-
-        roi_data['epoch_response'] = response_matrix
-        roi_data['time_vector'] = time_vector
+        if return_erm:
+            time_vector, response_matrix = self.getEpochResponseMatrix(np.vstack(roi_data.get('roi_response')))
+            roi_data['epoch_response'] = response_matrix
+            roi_data['time_vector'] = time_vector
 
         return roi_data
 

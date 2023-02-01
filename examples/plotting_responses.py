@@ -4,6 +4,7 @@ Example script to interact with ImagingDataObject, and extract data.
 https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
 """
+# %%
 from visanalysis.analysis import imaging_data, shared_analysis
 from visanalysis.util import plot_tools
 import matplotlib.pyplot as plt
@@ -19,6 +20,10 @@ file_path = os.path.join(experiment_file_directory, experiment_file_name + '.hdf
 ID = imaging_data.ImagingDataObject(file_path,
                                     series_number,
                                     quiet=False)
+
+# %%
+
+ID.getVolumeFrameOffsets()
 
 # %% PARAMETERS & METADATA
 
