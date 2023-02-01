@@ -22,11 +22,13 @@ class BrukerPlugin(base_plugin.BasePlugin):
         super().__init__()
         self.current_series = None
         self.mean_brain = None
-        self.current_series_number = 0
+        self.current_channel = 1  # 0, 1
+        self.current_image_file_name = None
 
     def updateImageSeries(self, data_directory, image_file_name, series_number, channel):
-        if series_number != self.current_series_number:  # only re-load if selected new series
-            self.current_series_number = series_number
+        if image_file_name != self.current_image_file_name or channel != self.current_channel:  # only re-load if selected new image file
+            self.current_image_file_name = image_file_name
+            self.current_channel = channel
             self.loadImageSeries(data_directory=data_directory,
                                  image_file_name=image_file_name,
                                  channel=channel)
@@ -35,8 +37,9 @@ class BrukerPlugin(base_plugin.BasePlugin):
             print('Series already loaded from {}:{}, channel {}'.format(data_directory, image_file_name, channel))
 
     def getRoiImage(self, data_directory, image_file_name, series_number, channel, z_slice):
-        if series_number != self.current_series_number:
-            self.current_series_number = series_number
+        if image_file_name != self.current_image_file_name or channel != self.current_channel:
+            self.current_image_file_name = image_file_name
+            self.current_channel = channel
             self.loadImageSeries(data_directory=data_directory,
                                  image_file_name=image_file_name,
                                  channel=channel)
