@@ -387,7 +387,7 @@ class ImagingDataObject():
                 bg_roi_group = roi_parent_group['bg']
                 bg_roi_response = list(bg_roi_group.get("roi_response")[:])
 
-            roi_data['roi_response'] = roi_data['roi_response'] - bg_roi_response
+            roi_data['roi_response'] = [x - np.squeeze(bg_roi_response) for x in roi_data['roi_response']]
 
         time_vector, response_matrix = self.getEpochResponseMatrix(np.vstack(roi_data.get('roi_response')))
 
@@ -396,7 +396,7 @@ class ImagingDataObject():
 
         return roi_data
 
-    def getEpochResponseMatrix(self, region_response, dff=True):
+    def getEpochResponseMatrix(self, region_response, dff=True, df=False):
         """
         getEpochReponseMatrix(self, region_response, dff=True)
             Takes in long stack response traces and splits them up into each stimulus epoch
@@ -455,6 +455,15 @@ class ImagingDataObject():
                 with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     new_resp_chunk = (new_resp_chunk - baseline) / baseline
+
+            if df:
+                # calculate baseline using pre frames, don't divide by f
+
+                baseline = np.mean(new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True)
+                # to dF/F
+                with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    new_resp_chunk = (new_resp_chunk - baseline)
 
             if epoch_frames > new_resp_chunk.shape[-1]:
                 print('Warnging: Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
@@ -555,6 +564,8 @@ class ImagingDataObject():
             response_amplitude = np.nanmax(epoch_response_matrix[..., pre_frames:], axis=-1)
         elif metric == 'mean':
             response_amplitude = np.nanmean(epoch_response_matrix[..., pre_frames:], axis=-1)
+        elif metric == 'min':
+            response_amplitude = np.nanmin(epoch_response_matrix[..., pre_frames:], axis=-1)
 
         return response_amplitude
 
