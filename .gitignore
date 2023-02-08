@@ -117,6 +117,16 @@ dmypy.json
 *config.yaml
 
 # Example data
-*/example_data
+*example_data
 
 # scratch.py
+
+
+# OS generated files #
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
