@@ -10,7 +10,6 @@ import functools
 import os
 import h5py
 import numpy as np
-import pandas as pd
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -231,146 +230,6 @@ class ImagingDataObject():
             frame_offsets[frame_ind] = frame_times[0,frame_ind]-frame_times[0,0]
         return frame_offsets
 
-    def getBehaviorTiming(self):
-        """
-        Get behavior timing (e.g. behavior camera exposures)
-        
-        Returns:
-            response_timing: dict
-            
-        """
-        with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
-            epoch_run_group = experiment_file.visititems(find_partial)
-            behavior_group = epoch_run_group['behavior']
-
-            behavior_timing = {}
-            cam_group_names = [x for x in behavior_group.keys() if isinstance(behavior_group[x], h5py.Group) and x!='log_lines']
-            for cam_name in cam_group_names:
-                cam_group = behavior_group[cam_name]
-                cam_timing = {}
-                cam_timing['exposure_onset']  = cam_group.get('exposure_onset')[:]  # sec
-                cam_timing['exposure_offset'] = cam_group.get('exposure_offset')[:]  # sec
-                cam_timing['exposure_time']   = cam_group.attrs['exposure_time']  # sec
-                cam_timing['frame_rate']   = cam_group.attrs['frame_rate']  # Hz
-                behavior_timing[cam_name] = cam_timing
-
-            return behavior_timing
-    
-    def getBehaviorData(self, stimulus_timing):
-        """
-        Get Fictrac data
-        """
-        
-        epoch_params = self.getEpochParameters()
-        n_epochs = len(epoch_params)
-        behavior_timing = self.getBehaviorTiming()
-        fictrac_timestamps = behavior_timing['cam_strobe_Fictrac']['exposure_onset'] # Assume cam_strobe_Fictrac exists, and use exposure_onset as timestamps for fictrac camera
-        
-        with h5py.File(self.file_path, 'r') as experiment_file:
-            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
-            epoch_run_group = experiment_file.visititems(find_partial)
-            behavior_group = epoch_run_group['behavior']
-
-            if 'fictrac_data' in behavior_group.keys():
-                header = behavior_group['fictrac_data'].attrs['fictrac_data_header']
-                fictrac_data = pd.DataFrame(behavior_group['fictrac_data'][:], columns=header)
-                fictrac_data = fictrac_data.astype({'frame_count': int, 'sequence_number': int})
-                fictrac_data = fictrac_data.set_index('frame_count')
-            else:
-                print("No Fictrac data found in the HDF data file.")
-                return
-            
-            if 'log_lines' in behavior_group.keys():
-                log_group = behavior_group['log_lines']
-                set_pos_0_groups = [(log_group[line_name]['set_pos_0'], log_group[line_name].attrs['ts']) for line_name in log_group.keys() if 'set_pos_0' in log_group[line_name].keys()]
-                
-                assert len(set_pos_0_groups) == n_epochs
-                
-                set_pos_0_frame_nums = [set_pos_0_group.attrs['frame_num'] for set_pos_0_group, ts in set_pos_0_groups] # 1:1 correspondence to epochs
-        
-        # Trim Fictrac timestamps and data to the min length of the two
-        n_fictrac_valid_frames = min(len(fictrac_timestamps), len(fictrac_data))
-        fictrac_timestamps = fictrac_timestamps[:n_fictrac_valid_frames]
-        fictrac_data = fictrac_data[:n_fictrac_valid_frames]
-        
-        ##### Pull out Fictrac data for each epoch #####
-            
-        stim_start_times = stimulus_timing['stimulus_start_times'] # from photodiodes
-        stim_end_times = stimulus_timing['stimulus_end_times'] # from photodiodes
-
-        assert len(stim_start_times) == len(stim_end_times)
-        assert len(stim_start_times) == n_epochs, 'stimulus_timing must have length equal to number of epochs.'
-
-        run_params = self.getRunParameters()
-        iti = run_params['pre_time'] + run_params['tail_time']
-
-        fictrac_data_for_epoch = {}
-        ts_pointer = 0
-        prev_ts_pointer = 0
-
-        # Epoch -1:
-        current_stim_end_time = stim_start_times[0] - iti # "stim end time" for epoch -1
-        # Find Fictrac index and timestamp for when stimulus starts
-        while fictrac_timestamps[ts_pointer] <= current_stim_end_time:
-            ts_pointer += 1
-        current_stim_end_fictrac_index = ts_pointer
-        # current_stim_end_fictrac_timestamp = fictrac_timestamps[ts_pointer]
-
-        # next_stim_start_time = stim_start_times[0]
-        # # Find Fictrac index and timestamp for when next stimulus starts
-        # while fictrac_timestamps[ts_pointer] <= next_stim_start_time:
-        #     ts_pointer += 1
-        # next_stim_start_fictrac_index = ts_pointer
-        # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
-
-        for e in range(len(epoch_params)):
-            prev_stim_end_fictrac_index = current_stim_end_fictrac_index
-            # prev_stim_end_fictrac_timestamp = current_stim_end_fictrac_timestamp
-            # current_stim_start_fictrac_index = next_stim_start_fictrac_index
-            # current_stim_start_fictrac_timestamp = next_stim_start_fictrac_timestamp
-
-            current_stim_start_time = stim_start_times[e]
-            current_stim_end_time = stim_end_times[e]
-            
-            # print(current_stim_end_time - current_stim_start_time)
-            # print(fictrac_timestamps[ts_pointer])
-            # print(current_stim_end_time)
-            
-            # Find Fictrac index and timestamp for when stimulus ends
-            while fictrac_timestamps[ts_pointer] <= current_stim_end_time:
-                # if fictrac_timestamps[ts_pointer] > 1200:
-                #     print(fictrac_timestamps[ts_pointer])
-                ts_pointer += 1
-            current_stim_end_fictrac_index = ts_pointer - 1
-            # current_stim_end_fictrac_timestamp = fictrac_timestamps[ts_pointer]
-
-            if e < len(epoch_params)-1:
-                next_stim_start_time = stim_start_times[e+1]
-            else:
-                next_stim_start_time = current_stim_end_time + iti
-            # Find Fictrac index and timestamp for when stimulus starts
-            while ts_pointer < len(fictrac_timestamps) and fictrac_timestamps[ts_pointer] <= next_stim_start_time:
-                ts_pointer += 1
-            next_stim_start_fictrac_index = ts_pointer
-            # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
-
-            epoch_set_pos_0_frame_num = set_pos_0_frame_nums[e]
-
-            epoch_fictrac_data = fictrac_data[prev_stim_end_fictrac_index : next_stim_start_fictrac_index].copy()
-            epoch_fictrac_data['integrated_xpos'] -= epoch_fictrac_data['integrated_xpos'][epoch_set_pos_0_frame_num]
-            epoch_fictrac_data['integrated_ypos'] -= epoch_fictrac_data['integrated_ypos'][epoch_set_pos_0_frame_num]
-            epoch_fictrac_data['integrated_heading'] = np.unwrap(epoch_fictrac_data['integrated_heading'])
-            epoch_fictrac_data['integrated_heading'] -= epoch_fictrac_data['integrated_heading'][epoch_set_pos_0_frame_num]
-            epoch_fictrac_data['integrated_heading'] = np.mod((epoch_fictrac_data['integrated_heading'] + np.pi), np.pi*2) - np.pi
-            
-            epoch_fictrac_timestamps = np.copy(fictrac_timestamps[prev_stim_end_fictrac_index : next_stim_start_fictrac_index])
-            epoch_fictrac_timestamps -= current_stim_start_time
-            epoch_name = f'epoch_{e+1:03d}'
-            fictrac_data_for_epoch[epoch_name] = {'timestamps':epoch_fictrac_timestamps, 'data':epoch_fictrac_data}
-
-        return fictrac_data_for_epoch
-    
     def getStimulusTiming(self,
                           plot_trace_flag=False):
         """
@@ -384,8 +243,8 @@ class ImagingDataObject():
         epoch_parameters = self.getEpochParameters()
 
         # If more than two voltage channels, just take the LAST two in the list as photodiodes
-        if len(frame_monitor_channels) > 3:
-            frame_monitor_channels = frame_monitor_channels[-3:]
+        if len(frame_monitor_channels) > 2:
+            frame_monitor_channels = frame_monitor_channels[-2:]
 
         if len(frame_monitor_channels.shape) == 1:
             frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
@@ -398,47 +257,19 @@ class ImagingDataObject():
             frame_monitor = frame_monitor_channels[ch, :]
 
             # Low-pass filter frame_monitor trace
-            b, a = signal.butter(4, min(10*self.command_frame_rate, sample_rate/2-1), btype='low', fs=sample_rate)
+            b, a = signal.butter(4, 10*self.command_frame_rate, btype='low', fs=sample_rate)
             frame_monitor = signal.filtfilt(b, a, frame_monitor)
 
-            # Remove extreme values
-            extreme_thresholds = np.percentile(frame_monitor, [0.1, 99.9])
-            frame_monitor[frame_monitor<extreme_thresholds[0]] = np.nan
-            frame_monitor[frame_monitor>extreme_thresholds[1]] = np.nan
-            
             # shift & normalize so frame monitor trace lives on [0 1]
-            frame_monitor = frame_monitor - np.nanmin(frame_monitor)
-            frame_monitor = frame_monitor / np.nanmax(frame_monitor)
+            frame_monitor = frame_monitor - np.min(frame_monitor)
+            frame_monitor = frame_monitor / np.max(frame_monitor)
 
             # find frame flip times
-            # V_orig = frame_monitor[0:-2]
-            # V_shift = frame_monitor[1:-1]
-            # ups = np.where(np.logical_and(V_orig < self.threshold, V_shift >= self.threshold))[0] + 1
-            # downs = np.where(np.logical_and(V_orig >= self.threshold, V_shift < self.threshold))[0] + 1
-            ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
-            ideal_frame_len_samples = int(np.round(1 / self.command_frame_rate * sample_rate))  # datapoints
-            min_peak_distance = int(np.floor(ideal_frame_len * 1.8))  # datapoints
-            ups,peak_params = signal.find_peaks(frame_monitor, height=0.2, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
-            
-            downs = []
-            for i in range(len(ups)):
-                up_0 = ups[i]
-                # up_1 = ups[i+1]
-                # sig = frame_monitor[up_0:up_1+1]
-                down = up_0 + ideal_frame_len_samples
-                downs.append(down)
-            downs = np.asarray(downs)
-                
-                
-            # downs,_ = signal.find_peaks(1-frame_monitor, height=(0.1, 0.85), threshold=None, distance=min_peak_distance, prominence=None, width=None, wlen=None, rel_height=0.5, plateau_size=None)
-            if plot_trace_flag:
-                plt.figure()
-                plt.plot(frame_monitor)
-                plt.plot(ups, np.ones(ups.shape), 'go')
-                plt.plot(downs, np.ones(downs.shape), 'rx')
-                plt.show()
-
-            frame_times = np.sort(np.append(ups, downs)) # datapoints
+            V_orig = frame_monitor[0:-2]
+            V_shift = frame_monitor[1:-1]
+            ups = np.where(np.logical_and(V_orig < self.threshold, V_shift >= self.threshold))[0] + 1
+            downs = np.where(np.logical_and(V_orig >= self.threshold, V_shift < self.threshold))[0] + 1
+            frame_times = np.sort(np.append(ups, downs))
 
             # Use frame flip times to find stimulus start times
             stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
@@ -451,29 +282,20 @@ class ImagingDataObject():
             ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
             frame_durations = []
             dropped_frame_times = []
-            good_frame_times = []
             for s_ind, ss in enumerate(stimulus_start_frames):
                 frame_len = np.diff(frame_times[stimulus_start_frames[s_ind]:stimulus_end_frames[s_ind]+1])
-                dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>self.frame_slop)[0]  # +1 b/c diff
+                dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>self.frame_slop)[0] + 1  # +1 b/c diff
                 if len(dropped_frame_inds) > 0:
-                    stim_dropped_frame_times = frame_times[ss+dropped_frame_inds]  # time when dropped frames should have flipped
-                    dropped_frame_times.append(stim_dropped_frame_times)
+                    dropped_frame_times.append(frame_times[ss]+dropped_frame_inds * ideal_frame_len)  # time when dropped frames should have flipped
                     # print('Warning! Ch. {} Dropped {} frames in epoch {}'.format(ch, len(dropped_frame_inds), s_ind))
                 good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) <= self.frame_slop)[0]
-                if len(good_frame_inds) > 0:
-                    stim_good_frame_times = frame_times[ss+good_frame_inds]
-                    good_frame_times.append(stim_good_frame_times)
-                    frame_durations.append(np.diff(stim_good_frame_times))  # only include non-dropped frames in frame rate calc
+                frame_durations.append(frame_len[good_frame_inds])  # only include non-dropped frames in frame rate calc
 
             if len(dropped_frame_times) > 0:
                 dropped_frame_times = np.hstack(dropped_frame_times)  # datapoints
             else:
                 dropped_frame_times = np.array(dropped_frame_times)
-            if len(good_frame_times) > 0:
-                good_frame_times = np.hstack(good_frame_times)  # datapoints
-            else:
-                good_frame_times = np.array(good_frame_times)
-            
+
             frame_durations = np.hstack(frame_durations)  # datapoints
             measured_frame_len = np.mean(frame_durations)  # datapoints
             frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
@@ -484,12 +306,9 @@ class ImagingDataObject():
                 ax = frame_monitor_figure.add_subplot(gs1[1, :])
                 ax.plot(time_vector, frame_monitor)
                 # ax.plot(time_vector[frame_times], self.threshold * np.ones(frame_times.shape), 'ko')
-                ax.plot(stimulus_start_times, self.threshold * np.ones(stimulus_start_times.shape), 'go', label='Stim start')
-                ax.plot(stimulus_end_times, self.threshold * np.ones(stimulus_end_times.shape)-0.05, 'ro', label='Stim end')
-                ax.plot(good_frame_times / sample_rate, 1 * np.ones(good_frame_times.shape), 'go', markerfacecolor='none', label='Good frame')
-                ax.plot(dropped_frame_times / sample_rate, 1 * np.ones(dropped_frame_times.shape), 'rx', label='Dropped frame')
-                ax.legend()
-                ax.set_xlabel('Time [s]')
+                ax.plot(stimulus_start_times, self.threshold * np.ones(stimulus_start_times.shape), 'go')
+                ax.plot(stimulus_end_times, self.threshold * np.ones(stimulus_end_times.shape), 'ro')
+                ax.plot(dropped_frame_times / sample_rate, 1 * np.ones(dropped_frame_times.shape), 'rx')
                 ax.set_title('Ch. {}: Frame rate = {:.2f} Hz'.format(ch, frame_rate), fontsize=12)
 
                 ax = frame_monitor_figure.add_subplot(gs1[0, 0])
@@ -516,11 +335,10 @@ class ImagingDataObject():
                 print('===================TIMING: Channel {}======================'.format(ch))
                 print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(epoch_parameters)))
                 inter_stim_starts = np.diff(stimulus_start_times)
-                if len(inter_stim_starts) >= 1:
-                    print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
-                                                                                                                             np.median(inter_stim_starts),
-                                                                                                                             inter_stim_starts.max(),
-                                                                                                                             run_parameters['stim_time'] + run_parameters['pre_time'] + run_parameters['tail_time']))
+                print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
+                                                                                                                         np.median(inter_stim_starts),
+                                                                                                                         inter_stim_starts.max(),
+                                                                                                                         run_parameters['stim_time'] + run_parameters['pre_time'] + run_parameters['tail_time']))
                 print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), run_parameters['stim_time']))
                 total_frames = len(frame_times)
                 dropped_frames = len(dropped_frame_times)
@@ -684,37 +502,6 @@ class ImagingDataObject():
 
 # # # #  # # # # # # # # # CONVENIENCE METHODS # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-    def getEpochGroupingsByParameters(self, parameter_key=None):
-        """
-        getEpochGroupingsByParameters(sel f, parameter_key=None)
-        Returns unique parameter combinations and indices of epochs that fall into each combination.
-        Params:
-            -parameter_key:
-                -None (default): conditions on any parameter(s) containing "current" or "component"
-                -string: name of a single protocol parameter you want to split on
-                -List of strings: multiple params to split on
-        Returns:
-            unique_parameter_values: unique combinations of param values, in the order given by
-                parameter_key, that corresponds to the response results
-            epoch_inds: ndarray
-        """
-
-        if parameter_key is not None:
-            if type(parameter_key) is str:  # single param key
-                parameter_key = [parameter_key]  # list-ify
-        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
-
-        # Get unique parameter combinations
-        unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
-
-        # Sort unique_parameter_values into some sensible ordering
-        unique_parameter_values.sort()
-
-        # Get epoch indices for each unique parameter combination
-        epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
-        
-        return unique_parameter_values, epoch_inds
-
 
     def getTrialAverages(self, epoch_response_matrix, parameter_key=None):
         """
@@ -736,8 +523,19 @@ class ImagingDataObject():
 
         """
 
-        # Get unique parameter combinations and epoch indices for each unique parameter combination
-        unique_parameter_values, epoch_inds = self.getEpochGroupingsByParameters(parameter_key)
+        if parameter_key is not None:
+            if type(parameter_key) is str:  # single param key
+                parameter_key = [parameter_key]  # list-ify
+        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
+
+        # Get unique parameter combinations
+        unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
+
+        # Sort unique_parameter_values into some sensible ordering
+        unique_parameter_values.sort()
+
+        # Get epoch indices for each unique parameter combination
+        epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
 
         n_stimuli = len(unique_parameter_values)
         n_regions, n_trials, t_dim = epoch_response_matrix.shape
