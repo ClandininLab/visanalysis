@@ -141,36 +141,38 @@ class BrukerPlugin(base_plugin.BasePlugin):
         image_file_path = os.path.join(data_directory, image_file_name)
         if '.tif' in image_file_name:  # tif assumed to be tyx series
             # native axes order is tyx: convert to xyzt, with z dummy axis
-            image_series = io.imread(image_file_path)
-            image_series = np.swapaxes(image_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
+            self.current_series = io.imread(image_file_path)
+            self.current_series = np.swapaxes(self.current_series, 0, 2)[:, :, np.newaxis, :]  # -> xyzt
             print('Loaded xyt image series {}'.format(image_file_path))
         elif '.nii' in image_file_name:
-            nib_brain = np.asanyarray(nib.load(image_file_path).dataobj)
+            nib_brain = np.squeeze(np.asanyarray(nib.load(image_file_path).dataobj).astype('uint16'))
             brain_dims = nib_brain.shape
+            print('brain_dims = {}'.format(brain_dims))
             if len(brain_dims) == 3:  # xyt
-                image_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
+                self.current_series = nib_brain[:, :, np.newaxis, :]  # -> xyzt
                 print('Loaded xyt image series {}'.format(image_file_path))
 
             elif len(brain_dims) == 4:  # xyzt or xytc
                 if brain_dims[-1] == metadata_image_dims[-1]:  # xytc
-                    image_series = np.squeeze(nib_brain[:, :, :, channel])[:, :, np.newaxis, :]  # xytc -> xyzt
+                    self.current_series = np.squeeze(nib_brain[:, :, :, channel])[:, :, np.newaxis, :]  # xytc -> xyzt
                     print('Loaded xytc image series {}'.format(image_file_path))
                 else:  # xyzt
-                    image_series = nib_brain  # xyzt
+                    self.current_series = nib_brain  # xyzt
                     print('Loaded xyzt image series {}'.format(image_file_path))
 
             elif len(brain_dims) == 5:  # xyztc
-                image_series = np.squeeze(nib_brain[:, :, :, :, channel])  # xyzt
+                self.current_series = np.squeeze(nib_brain[:, :, :, :, channel])  # xyzt
                 print('Loaded xyzt image series from xyztc {}: channel {}'.format(image_file_path, channel))
 
             else:
                 print('Unrecognized image dimensions')
-                image_series = None
+                self.current_series = None
         else:
             print('Unrecognized image format. Expects .tif or .nii')
 
-        self.current_series = image_series
-        self.mean_brain = np.mean(image_series, axis=3)  # xyz
+        self.mean_brain = np.mean(self.current_series, axis=3)  # xyz
+
+        print('Brain shape is {} (xyzt)'.format(self.current_series.shape))
 
     def saveRegionResponsesFromMask(self, file_path, series_number, response_set_name, mask, include_zero=False):
         """
