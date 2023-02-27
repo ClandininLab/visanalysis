@@ -502,6 +502,37 @@ class ImagingDataObject():
 
 # # # #  # # # # # # # # # CONVENIENCE METHODS # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+    def getEpochGroupingsByParameters(self, parameter_key=None):
+        """
+        getEpochGroupingsByParameters(sel f, parameter_key=None)
+        Returns unique parameter combinations and indices of epochs that fall into each combination.
+        Params:
+            -parameter_key:
+                -None (default): conditions on any parameter(s) containing "current" or "component"
+                -string: name of a single protocol parameter you want to split on
+                -List of strings: multiple params to split on
+        Returns:
+            unique_parameter_values: unique combinations of param values, in the order given by
+                parameter_key, that corresponds to the response results
+            epoch_inds: ndarray
+        """
+
+        if parameter_key is not None:
+            if type(parameter_key) is str:  # single param key
+                parameter_key = [parameter_key]  # list-ify
+        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
+
+        # Get unique parameter combinations
+        unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
+
+        # Sort unique_parameter_values into some sensible ordering
+        unique_parameter_values.sort()
+
+        # Get epoch indices for each unique parameter combination
+        epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
+        
+        return unique_parameter_values, epoch_inds
+
 
     def getTrialAverages(self, epoch_response_matrix, parameter_key=None):
         """
@@ -523,19 +554,8 @@ class ImagingDataObject():
 
         """
 
-        if parameter_key is not None:
-            if type(parameter_key) is str:  # single param key
-                parameter_key = [parameter_key]  # list-ify
-        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
-
-        # Get unique parameter combinations
-        unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
-
-        # Sort unique_parameter_values into some sensible ordering
-        unique_parameter_values.sort()
-
-        # Get epoch indices for each unique parameter combination
-        epoch_inds = [np.where([pv == up for pv in parameter_values])[0] for up in unique_parameter_values]
+        # Get unique parameter combinations and epoch indices for each unique parameter combination
+        unique_parameter_values, epoch_inds = self.getEpochGroupingsByParameters(parameter_key)
 
         n_stimuli = len(unique_parameter_values)
         n_regions, n_trials, t_dim = epoch_response_matrix.shape
