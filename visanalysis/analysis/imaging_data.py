@@ -377,13 +377,11 @@ class ImagingDataObject():
                 cam_timing['frame_rate']   = cam_group.attrs['frame_rate']  # Hz
                 behavior_timing[cam_name] = cam_timing
                 
+            # Fictrac data exists, but no fictrac camera group with precise timing
             fictrac_cam_group_candidates = [x for x in cam_group_names if 'fictrac' in x.lower()]
-            if len(fictrac_cam_group_candidates) == 0 and 'fictrac_data' in behavior_group.keys():
-                # Fictrac data exists, but no fictrac camera group with precise timing
-                
+            if len(fictrac_cam_group_candidates) == 0 and 'fictrac_data' in behavior_group.keys():                
                 fictrac_header = behavior_group['fictrac_data'].attrs['fictrac_data_header']
-                frame_time = behavior_group['fictrac_data'][:, fictrac_header.index('timestamp')]
-                frame_time -= frame_time[0]
+                frame_time = behavior_group['fictrac_data'][:, fictrac_header.index('timestamp')] / 1000
                 frame_rate = 1/np.mean(np.diff(frame_time))
                 
                 behavior_timing['fictrac'] = {}
