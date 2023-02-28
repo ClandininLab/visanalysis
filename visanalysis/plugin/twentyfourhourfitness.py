@@ -8,10 +8,13 @@ import numpy as np
 import h5py
 import functools
 import json
+from datetime import timezone
+import dateutil
 
 from visanalysis.plugin import base as base_plugin
 from visanalysis.util import h5io
 
+from visanalysis.analysis.imaging_data import ImagingDataObject
 
 class TwentyFourHourFitnessPlugin(base_plugin.BasePlugin):
     def __init__(self):
@@ -75,3 +78,59 @@ class TwentyFourHourFitnessPlugin(base_plugin.BasePlugin):
             else:
                 print(f'WARNING! No Fictrac data found in {fictrac_data_path}.')
 
+class TwentyFourHourDataObject(ImagingDataObject):
+    """
+    TwentyFourHourDataObject inherits ImagingDataObject and alters the getStimulusTiming method.
+    """
+    __slots__ = ["file_path", "series_number",  "colors", "quiet",
+                 "timing_channel_ind", "threshold", "frame_slop", "command_frame_rate"]
+        
+    def getStimulusTiming(self,
+                          plot_trace_flag=False):
+        """
+        Returns stimulus timing information based on Visprotocol epoch times.
+        """
+
+        run_parameters = self.getRunParameters()
+        epoch_parameters = self.getEpochParameters()
+
+        stimulus_start_times = []
+        stimulus_end_times = []
+        
+        with h5py.File(self.file_path, 'r') as experiment_file:
+            find_partial = functools.partial(h5io.find_series, sn=self.series_number)
+            epochs_group = experiment_file.visititems(find_partial)['epochs']
+            n_epochs = len(epochs_group)
+            for e, epoch in enumerate(epochs_group.values()):
+                # Stimulus start time
+                if 'epoch_unix_time' in epoch.attrs:
+                    epoch_unix_time = epoch.attrs['epoch_unix_time']
+                else:
+                    # For older VP data when epoch_unix_time was not saved, get date and epoch_time and convert to unix time
+                    date = experiment_file.attrs['date']
+                    epoch_time = epoch.attrs['epoch_time']
+                    epoch_unix_time = dateutil.parser.parse(date+' '+epoch_time).astimezone(timezone.utc).timestamp()
+                stimulus_start_times.append(epoch_unix_time)
+                
+                # Stimulus end time
+                if 'epoch_end_unix_time' in epoch.attrs:
+                    epoch_end_unix_time = epoch.attrs['epoch_end_unix_time']
+                else:
+                    # For older VP data when epoch_end_unix_time was not saved, get stim_duration and add to epoch_unix_time
+                    if 'stim_time' in run_parameters:
+                        stim_duration = run_parameters['stim_time']
+                    elif 'current_stim_time' in epoch_parameters:
+                        stim_duration = epoch_parameters['current_stim_time']
+                    else: # This will break when we only have 1 epoch, so hopefully we didn't enter this scenario
+                        if e == n_epochs-1:
+                            stim_duration = stimulus_end_times[-1] # Use previous epoch end time as a proxy
+                        else:
+                            iti = run_parameters['pre_time'] + run_parameters['tail_time']
+                            stim_duration = epochs_group[f'epoch_{e+2:03d}'].attrs['epoch_unix_time'] - epoch_unix_time - iti
+                    epoch_end_unix_time = epoch_unix_time + stim_duration
+                stimulus_end_times.append(epoch_end_unix_time)
+            
+        stimulus_timing = {'stimulus_end_times': stimulus_end_times,
+                           'stimulus_start_times': stimulus_start_times}
+
+        return stimulus_timing
