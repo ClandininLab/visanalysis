@@ -381,7 +381,7 @@ class ImagingDataObject():
             fictrac_cam_group_candidates = [x for x in cam_group_names if 'fictrac' in x.lower()]
             if len(fictrac_cam_group_candidates) == 0 and 'fictrac_data' in behavior_group.keys():                
                 fictrac_header = behavior_group['fictrac_data'].attrs['fictrac_data_header']
-                frame_time = behavior_group['fictrac_data'][:, fictrac_header.index('timestamp')] / 1000
+                frame_time = behavior_group['fictrac_data'][:, np.where(fictrac_header=='timestamp')[0][0]] / 1000
                 frame_rate = 1/np.mean(np.diff(frame_time))
                 
                 behavior_timing['fictrac'] = {}
@@ -445,7 +445,7 @@ class ImagingDataObject():
         run_params = self.getRunParameters()
         iti = run_params['pre_time'] + run_params['tail_time']
 
-        fictrac_data_for_epoch = {}
+        fictrac_data_for_epoch = []
         ts_pointer = 0
         prev_ts_pointer = 0
 
@@ -506,8 +506,7 @@ class ImagingDataObject():
             
             epoch_fictrac_timestamps = np.copy(fictrac_timestamps[prev_stim_end_fictrac_index : next_stim_start_fictrac_index])
             epoch_fictrac_timestamps -= current_stim_start_time
-            epoch_name = f'epoch_{e+1:03d}'
-            fictrac_data_for_epoch[epoch_name] = {'timestamps':epoch_fictrac_timestamps, 'data':epoch_fictrac_data}
+            fictrac_data_for_epoch.append({'timestamps':epoch_fictrac_timestamps, 'data':epoch_fictrac_data})
 
         return fictrac_data_for_epoch
 

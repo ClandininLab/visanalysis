@@ -51,7 +51,7 @@ class TwentyFourHourFitnessPlugin(base_plugin.BasePlugin):
                         'abs_vec_world_x', 'abs_vec_world_y', 'abs_vec_world_z',
                         'integrated_xpos', 'integrated_ypos', 'integrated_heading',
                         'direction', 'speed', 'integrated_x_movement', 'integrated_y_movement',
-                        'timestamp', 'sequence_number', 'delta_ts', 'timestamp_alt']                
+                        'timestamp', 'sequence_number', 'delta_ts', 'timestamp_alt', 'sync']                
                 fictrac_data = np.genfromtxt(fictrac_data_path, delimiter=",")
 
                 # log file
