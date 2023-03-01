@@ -13,10 +13,13 @@ import functools
 import nibabel as nib
 import json
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import scipy.signal as signal
 
 from visanalysis.plugin import base as base_plugin
 from visanalysis.util import h5io
 
+from visanalysis.analysis.imaging_data import ImagingDataObject
 
 class FortyHourFitnessPlugin(base_plugin.BasePlugin):
     def __init__(self):
@@ -211,3 +214,179 @@ def getVoltageRecording(filepath):
         
     return daq_data_np.T, input_ch_nicknames, time_vector, daq_framerate
 
+
+
+
+# %%
+###########################################################################
+# DataObject specific to FortyHourFitness data. Inherits ImagingDataObject
+###########################################################################
+
+class FortyHourDataObject(ImagingDataObject):
+    """
+    FortyHourDataObject inherits ImagingDataObject and alters the getStimulusTiming method.
+    """
+    
+    def getStimulusTiming(self,
+                          plot_trace_flag=False):
+        """
+        Returns stimulus timing information based on photodiode voltage trace from frame tracker signal.
+
+
+
+        """
+        frame_monitor_channels, time_vector, sample_rate = self.getVoltageData()
+        run_parameters = self.getRunParameters()
+        epoch_parameters = self.getEpochParameters()
+
+        # If more than two voltage channels, just take the LAST two in the list as photodiodes
+        if len(frame_monitor_channels) > 3:
+            frame_monitor_channels = frame_monitor_channels[-3:]
+
+        if len(frame_monitor_channels.shape) == 1:
+            frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
+
+        minimum_epoch_separation = 0.9 * (run_parameters['pre_time'] + run_parameters['tail_time']) * sample_rate
+
+        num_channels = frame_monitor_channels.shape[0]
+        channel_timing = []
+        for ch in range(num_channels):
+            frame_monitor = frame_monitor_channels[ch, :]
+
+            # Low-pass filter frame_monitor trace
+            b, a = signal.butter(4, min(10*self.command_frame_rate, sample_rate/2-1), btype='low', fs=sample_rate)
+            frame_monitor = signal.filtfilt(b, a, frame_monitor)
+
+            # Remove extreme values
+            extreme_thresholds = np.percentile(frame_monitor, [0.1, 99.9])
+            frame_monitor[frame_monitor<extreme_thresholds[0]] = np.nan
+            frame_monitor[frame_monitor>extreme_thresholds[1]] = np.nan
+            
+            # shift & normalize so frame monitor trace lives on [0 1]
+            frame_monitor = frame_monitor - np.nanmin(frame_monitor)
+            frame_monitor = frame_monitor / np.nanmax(frame_monitor)
+
+            # find frame flip times
+            # V_orig = frame_monitor[0:-2]
+            # V_shift = frame_monitor[1:-1]
+            # ups = np.where(np.logical_and(V_orig < self.threshold, V_shift >= self.threshold))[0] + 1
+            # downs = np.where(np.logical_and(V_orig >= self.threshold, V_shift < self.threshold))[0] + 1
+            ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
+            ideal_frame_len_samples = int(np.round(1 / self.command_frame_rate * sample_rate))  # datapoints
+            min_peak_distance = int(np.floor(ideal_frame_len * 1.8))  # datapoints
+            ups,peak_params = signal.find_peaks(frame_monitor, height=0.2, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
+            
+            downs = []
+            for i in range(len(ups)):
+                up_0 = ups[i]
+                # up_1 = ups[i+1]
+                # sig = frame_monitor[up_0:up_1+1]
+                down = up_0 + ideal_frame_len_samples
+                downs.append(down)
+            downs = np.asarray(downs)
+                
+                
+            # downs,_ = signal.find_peaks(1-frame_monitor, height=(0.1, 0.85), threshold=None, distance=min_peak_distance, prominence=None, width=None, wlen=None, rel_height=0.5, plateau_size=None)
+            if plot_trace_flag:
+                plt.figure()
+                plt.plot(frame_monitor)
+                plt.plot(ups, np.ones(ups.shape), 'go')
+                plt.plot(downs, np.ones(downs.shape), 'rx')
+                plt.show()
+
+            frame_times = np.sort(np.append(ups, downs)) # datapoints
+
+            # Use frame flip times to find stimulus start times
+            stimulus_start_frames = np.append(0, np.where(np.diff(frame_times) > minimum_epoch_separation)[0] + 1)
+            stimulus_end_frames = np.append(np.where(np.diff(frame_times) > minimum_epoch_separation)[0], len(frame_times)-1)
+            stimulus_start_times = frame_times[stimulus_start_frames] / sample_rate  # datapoints -> sec
+            stimulus_end_times = frame_times[stimulus_end_frames] / sample_rate  # datapoints -> sec
+
+            stim_durations = stimulus_end_times - stimulus_start_times  # sec
+
+            ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
+            frame_durations = []
+            dropped_frame_times = []
+            good_frame_times = []
+            for s_ind, ss in enumerate(stimulus_start_frames):
+                frame_len = np.diff(frame_times[stimulus_start_frames[s_ind]:stimulus_end_frames[s_ind]+1])
+                dropped_frame_inds = np.where(np.abs(frame_len - ideal_frame_len)>self.frame_slop)[0]  # +1 b/c diff
+                if len(dropped_frame_inds) > 0:
+                    stim_dropped_frame_times = frame_times[ss+dropped_frame_inds]  # time when dropped frames should have flipped
+                    dropped_frame_times.append(stim_dropped_frame_times)
+                    # print('Warning! Ch. {} Dropped {} frames in epoch {}'.format(ch, len(dropped_frame_inds), s_ind))
+                good_frame_inds = np.where(np.abs(frame_len - ideal_frame_len) <= self.frame_slop)[0]
+                if len(good_frame_inds) > 0:
+                    stim_good_frame_times = frame_times[ss+good_frame_inds]
+                    good_frame_times.append(stim_good_frame_times)
+                    frame_durations.append(np.diff(stim_good_frame_times))  # only include non-dropped frames in frame rate calc
+
+            if len(dropped_frame_times) > 0:
+                dropped_frame_times = np.hstack(dropped_frame_times)  # datapoints
+            else:
+                dropped_frame_times = np.array(dropped_frame_times)
+            if len(good_frame_times) > 0:
+                good_frame_times = np.hstack(good_frame_times)  # datapoints
+            else:
+                good_frame_times = np.array(good_frame_times)
+            
+            frame_durations = np.hstack(frame_durations)  # datapoints
+            measured_frame_len = np.mean(frame_durations)  # datapoints
+            frame_rate = 1 / (measured_frame_len / sample_rate)  # Hz
+
+            if plot_trace_flag:
+                frame_monitor_figure = plt.figure(figsize=(12, 8))
+                gs1 = gridspec.GridSpec(2, 2)
+                ax = frame_monitor_figure.add_subplot(gs1[1, :])
+                ax.plot(time_vector, frame_monitor)
+                # ax.plot(time_vector[frame_times], self.threshold * np.ones(frame_times.shape), 'ko')
+                ax.plot(stimulus_start_times, self.threshold * np.ones(stimulus_start_times.shape), 'go', label='Stim start')
+                ax.plot(stimulus_end_times, self.threshold * np.ones(stimulus_end_times.shape)-0.05, 'ro', label='Stim end')
+                ax.plot(good_frame_times / sample_rate, 1 * np.ones(good_frame_times.shape), 'go', markerfacecolor='none', label='Good frame')
+                ax.plot(dropped_frame_times / sample_rate, 1 * np.ones(dropped_frame_times.shape), 'rx', label='Dropped frame')
+                ax.legend()
+                ax.set_xlabel('Time [s]')
+                ax.set_title('Ch. {}: Frame rate = {:.2f} Hz'.format(ch, frame_rate), fontsize=12)
+
+                ax = frame_monitor_figure.add_subplot(gs1[0, 0])
+                ax.hist(frame_durations)
+                ax.axvline(ideal_frame_len, color='k')
+                ax.set_xlabel('Frame duration (datapoints)')
+
+                ax = frame_monitor_figure.add_subplot(gs1[0, 1])
+                ax.plot(stim_durations, 'b.')
+                ax.axhline(y=run_parameters['stim_time'], xmin=0, xmax=run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
+                ymin = np.min([0.9 * run_parameters['stim_time'], np.min(stim_durations)])
+                ymax = np.max([1.1 * run_parameters['stim_time'], np.max(stim_durations)])
+                ax.set_ylim([ymin, ymax])
+                ax.set_xlabel('Epoch')
+                ax.set_ylabel('Stim duration (sec)')
+
+                frame_monitor_figure.tight_layout()
+                plt.show()
+
+            if self.quiet:
+                pass
+            else:
+                # Print timing summary
+                print('===================TIMING: Channel {}======================'.format(ch))
+                print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(epoch_parameters)))
+                inter_stim_starts = np.diff(stimulus_start_times)
+                if len(inter_stim_starts) >= 1:
+                    print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
+                                                                                                                             np.median(inter_stim_starts),
+                                                                                                                             inter_stim_starts.max(),
+                                                                                                                             run_parameters['stim_time'] + run_parameters['pre_time'] + run_parameters['tail_time']))
+                print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), run_parameters['stim_time']))
+                total_frames = len(frame_times)
+                dropped_frames = len(dropped_frame_times)
+                print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
+                print('==========================================================')
+
+            new_dict = {'stimulus_end_times': stimulus_end_times,
+                        'stimulus_start_times': stimulus_start_times,
+                        'dropped_frame_times': dropped_frame_times,
+                        'frame_rate': frame_rate}
+            channel_timing.append(new_dict)
+
+        return channel_timing[self.timing_channel_ind]

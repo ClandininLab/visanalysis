@@ -82,9 +82,7 @@ class TwentyFourHourDataObject(ImagingDataObject):
     """
     TwentyFourHourDataObject inherits ImagingDataObject and alters the getStimulusTiming method.
     """
-    __slots__ = ["file_path", "series_number",  "colors", "quiet",
-                 "timing_channel_ind", "threshold", "frame_slop", "command_frame_rate"]
-        
+
     def getStimulusTiming(self,
                           plot_trace_flag=False):
         """
