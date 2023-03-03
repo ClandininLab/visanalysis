@@ -125,6 +125,26 @@ class ImagingDataObject():
 
         return stim_dicts
 
+    def getExperimentMetadata(self, metadata_key=None):
+        """
+        Return experiment metadata
+
+        :metadata_key: name of metadata item to return. If None, return all metadata as dict. Default=None
+
+        """
+        with h5py.File(self.file_path, 'r') as experiment_file:
+
+            if metadata_key:
+                assert metadata_key in experiment_file.attrs, 'metadata_key "{}" not found in metadata. \n'.format(metadata_key) \
+                    + 'Available metadata keys are {}'.format([x for x in fly_group.attrs])
+                exp_metadata = experiment_file.attrs[metadata_key]
+            else:  # Get all fly metadata in a dict
+                exp_metadata = {}
+                for attr_key in experiment_file.attrs:
+                    exp_metadata[attr_key] = experiment_file.attrs[attr_key]
+
+        return exp_metadata
+
     def getFlyMetadata(self, metadata_key=None):
         """
         Return fly metadata
