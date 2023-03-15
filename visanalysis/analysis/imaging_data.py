@@ -460,7 +460,10 @@ class ImagingDataObject():
         stim_end_times = stimulus_timing['stimulus_end_times'] # from photodiodes
 
         assert len(stim_start_times) == len(stim_end_times)
-        assert len(stim_start_times) == n_epochs, 'stimulus_timing must have length equal to number of epochs.'
+        
+        if len(stim_start_times) < n_epochs:
+            print('CAUTION! stimulus_timing has length less than number of epochs. Trimming # of epochs.')
+            n_epochs = len(stim_start_times)
 
         run_params = self.getRunParameters()
         iti = run_params['pre_time'] + run_params['tail_time']
@@ -484,7 +487,7 @@ class ImagingDataObject():
         # next_stim_start_fictrac_index = ts_pointer
         # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
-        for e in range(len(epoch_params)):
+        for e in range(n_epochs):
             prev_stim_end_fictrac_index = current_stim_end_fictrac_index
             # prev_stim_end_fictrac_timestamp = current_stim_end_fictrac_timestamp
             # current_stim_start_fictrac_index = next_stim_start_fictrac_index
@@ -505,7 +508,7 @@ class ImagingDataObject():
             current_stim_end_fictrac_index = ts_pointer - 1
             # current_stim_end_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
-            if e < len(epoch_params)-1:
+            if e < n_epochs-1:
                 next_stim_start_time = stim_start_times[e+1]
             else:
                 next_stim_start_time = current_stim_end_time + iti
