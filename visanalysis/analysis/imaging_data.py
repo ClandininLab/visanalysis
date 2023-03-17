@@ -133,10 +133,9 @@ class ImagingDataObject():
 
         """
         with h5py.File(self.file_path, 'r') as experiment_file:
-
             if metadata_key:
                 assert metadata_key in experiment_file.attrs, 'metadata_key "{}" not found in metadata. \n'.format(metadata_key) \
-                    + 'Available metadata keys are {}'.format([x for x in fly_group.attrs])
+                    + 'Available metadata keys are {}'.format([x for x in experiment_file.attrs])
                 exp_metadata = experiment_file.attrs[metadata_key]
             else:  # Get all fly metadata in a dict
                 exp_metadata = {}
