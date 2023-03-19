@@ -92,14 +92,19 @@ class TwentyFourHourDataObject(ImagingDataObject):
         run_parameters = self.getRunParameters()
         epoch_parameters = self.getEpochParameters()
 
-        stimulus_start_times = []
-        stimulus_end_times = []
+        stim_start_times = []
+        stim_end_times = []
         
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epochs_group = experiment_file.visititems(find_partial)['epochs']
             n_epochs = len(epochs_group)
             for e, epoch in enumerate(epochs_group.values()):
+                
+                pre_time = epoch_parameters[e]['current_pre_time'] if 'current_pre_time' in epoch_parameters[e] else run_parameters['pre_time']
+                stim_time = epoch_parameters[e]['current_stim_time'] if 'current_stim_time' in epoch_parameters[e] else run_parameters['stim_time']
+                tail_time = epoch_parameters[e]['current_tail_time'] if 'current_tail_time' in epoch_parameters[e] else run_parameters['tail_time']
+                
                 # Stimulus start time
                 if 'epoch_unix_time' in epoch.attrs:
                     epoch_unix_time = epoch.attrs['epoch_unix_time']
@@ -108,7 +113,8 @@ class TwentyFourHourDataObject(ImagingDataObject):
                     date = experiment_file.attrs['date']
                     epoch_time = epoch.attrs['epoch_time']
                     epoch_unix_time = dateutil.parser.parse(date+' '+epoch_time).astimezone(timezone.utc).timestamp()
-                stimulus_start_times.append(epoch_unix_time)
+                stim_start_time = epoch_unix_time + pre_time
+                # stim_start_times.append(stim_start_time)
                 
                 # Stimulus end time
                 if 'epoch_end_unix_time' in epoch.attrs:
@@ -121,14 +127,22 @@ class TwentyFourHourDataObject(ImagingDataObject):
                         stim_duration = epoch_parameters['current_stim_time']
                     else: # This will break when we only have 1 epoch, so hopefully we didn't enter this scenario
                         if e == n_epochs-1:
-                            stim_duration = stimulus_end_times[-1] # Use previous epoch end time as a proxy
+                            stim_duration = stim_end_times[-1] # Use previous epoch end time as a proxy
                         else:
                             iti = run_parameters['pre_time'] + run_parameters['tail_time']
                             stim_duration = epochs_group[f'epoch_{e+2:03d}'].attrs['epoch_unix_time'] - epoch_unix_time - iti
-                    epoch_end_unix_time = epoch_unix_time + stim_duration
-                stimulus_end_times.append(epoch_end_unix_time)
+                    epoch_end_unix_time = stim_start_time + stim_duration + tail_time
+                stim_end_time = epoch_end_unix_time - tail_time
+                stim_end_times.append(stim_end_time)
+                
+                stim_start_time_more_accurate = stim_end_time - stim_time
+                stim_start_times.append(stim_start_time_more_accurate)
+                # MC: epoch_time and epoch_unix_time are recorded before load_stim, so could be early by a few ms.
+                #     so use stim_end_time - stim_time instead
+                # Note that even this is is not perfect. epoch_end_unix_time is recorded
+                #     after epoch ends, so it could be slightly behind actual stim_end_time + tail_time.
             
-        stimulus_timing = {'stimulus_end_times': stimulus_end_times,
-                           'stimulus_start_times': stimulus_start_times}
+        stimulus_timing = {'stimulus_end_times': stim_end_times,
+                           'stimulus_start_times': stim_start_times}
 
         return stimulus_timing
