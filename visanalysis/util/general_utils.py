@@ -1,3 +1,7 @@
+import numpy as np
+from scipy.stats import sem
+import collections
+
 def nansem(a, axis=0, ddof=1, nan_policy='omit'):
     return sem(a, axis, ddof, nan_policy)
 
@@ -23,3 +27,14 @@ def generate_standard_timestamp(timestamps):
     max_time = np.nanmax(timestamps)
 
     return np.arange(min_time, max_time, mean_diff)
+
+def convert_iterables_to_tuples(l, recursive=False):
+    '''
+    l: iterable of items, including iterables
+
+    Converts all iterables inside to tuples
+    '''
+    if recursive:
+        return [tuple(convert_iterables_to_tuples(i, recursive)) if isinstance(i, collections.Iterable) else i for i in l]
+    else:
+        return [tuple(i) if isinstance(i, collections.Iterable) else i for i in l]

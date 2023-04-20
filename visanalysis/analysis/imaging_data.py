@@ -18,6 +18,7 @@ import scipy.signal as signal
 import warnings
 
 from visanalysis.util import plot_tools, h5io
+from visanalysis.util import general_utils as gu
 
 
 class ImagingDataObject():
@@ -699,7 +700,7 @@ class ImagingDataObject():
         if parameter_key is not None:
             if type(parameter_key) is str:  # single param key
                 parameter_key = [parameter_key]  # list-ify
-        parameter_values = [list(pd.values()) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
+        parameter_values = [list(gu.convert_iterables_to_tuples(pd.values())) for pd in self.getEpochParameterDicts(target_keys=parameter_key)]
 
         # Get unique parameter combinations
         unique_parameter_values = [list(s) for s in set(tuple(pv) for pv in parameter_values)]
