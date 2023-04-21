@@ -110,10 +110,14 @@ class FortyHourFitnessPlugin(base_plugin.BasePlugin):
 
             #### Fictrac
             fictrac_directory = os.path.join(series_directory, 'loco')
-            fictrac_data_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x.endswith('.dat')]
-            log_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x=='log.txt']
-            assert len(log_path) == 1, "log.txt must exist in Fictrac data directory."
-            log_path = log_path[0]
+            if os.listdir(fictrac_directory):
+                fictrac_data_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x.endswith('.dat')]                
+                log_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x=='log.txt']
+                assert len(log_path) == 1, "log.txt must exist in Fictrac data directory."
+                log_path = log_path[0]
+            else:
+                fictrac_data_path = []
+                log_path = None
             
             if len(fictrac_data_path) > 0:
                 fictrac_data_path = fictrac_data_path[0]
