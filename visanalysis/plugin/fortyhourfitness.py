@@ -278,7 +278,7 @@ class FortyHourDataObject(ImagingDataObject):
             ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
             ideal_frame_len_samples = int(np.round(1 / self.command_frame_rate * sample_rate))  # datapoints
             min_peak_distance = int(np.floor(ideal_frame_len * 1.8))  # datapoints
-            ups,peak_params = signal.find_peaks(frame_monitor, height=0.2, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
+            ups,peak_params = signal.find_peaks(frame_monitor, height=0.4, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
             
             downs = []
             for i in range(len(ups)):
@@ -359,9 +359,12 @@ class FortyHourDataObject(ImagingDataObject):
 
                 ax = frame_monitor_figure.add_subplot(gs1[0, 1])
                 ax.plot(stim_durations, 'b.')
-                ax.axhline(y=run_parameters['stim_time'], xmin=0, xmax=run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
-                ymin = np.min([0.9 * run_parameters['stim_time'], np.min(stim_durations)])
-                ymax = np.max([1.1 * run_parameters['stim_time'], np.max(stim_durations)])
+                if 'stim_time' in run_parameters:
+                    ax.axhline(y=run_parameters['stim_time'], xmin=0, xmax=run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
+                else:
+                    ax.axhline(y=np.mean(stim_durations), xmin=0, xmax=run_parameters['num_epochs'], color='k', linestyle='-', marker='None', alpha=0.50)
+                ymin = 0.9 * np.min(stim_durations)
+                ymax = 1.1 * np.max(stim_durations)
                 ax.set_ylim([ymin, ymax])
                 ax.set_xlabel('Epoch')
                 ax.set_ylabel('Stim duration (sec)')
@@ -377,11 +380,19 @@ class FortyHourDataObject(ImagingDataObject):
                 print('{} Stims presented (of {} parameterized)'.format(len(stim_durations), len(epoch_parameters)))
                 inter_stim_starts = np.diff(stimulus_start_times)
                 if len(inter_stim_starts) >= 1:
-                    print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
-                                                                                                                             np.median(inter_stim_starts),
-                                                                                                                             inter_stim_starts.max(),
-                                                                                                                             run_parameters['stim_time'] + run_parameters['pre_time'] + run_parameters['tail_time']))
-                print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), run_parameters['stim_time']))
+                    if 'stim_time' in run_parameters:
+                        print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(inter_stim_starts.min(),
+                                                                                                                                np.median(inter_stim_starts),
+                                                                                                                                inter_stim_starts.max(),
+                                                                                                                                run_parameters['stim_time'] + run_parameters['pre_time'] + run_parameters['tail_time']))
+                    else:
+                        print('Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] sec'.format(inter_stim_starts.min(),
+                                                                                                                                np.median(inter_stim_starts),
+                                                                                                                                inter_stim_starts.max()))
+                if 'stim_time' in run_parameters:
+                    print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max(), run_parameters['stim_time']))
+                else:
+                    print('Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] sec'.format(stim_durations.min(), np.median(stim_durations), stim_durations.max()))
                 total_frames = len(frame_times)
                 dropped_frames = len(dropped_frame_times)
                 print('Dropped {} / {} frames ({:.2f}%)'.format(dropped_frames, total_frames, 100*dropped_frames/total_frames))
