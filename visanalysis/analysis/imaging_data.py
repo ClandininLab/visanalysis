@@ -487,7 +487,9 @@ class ImagingDataObject():
         # next_stim_start_fictrac_index = ts_pointer
         # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
+        print('Pulling out Fictrac data for each epoch...')
         for e in range(n_epochs):
+            print(f'Epoch {e+1}/{n_epochs}') 
             prev_stim_end_fictrac_index = current_stim_end_fictrac_index
             # prev_stim_end_fictrac_timestamp = current_stim_end_fictrac_timestamp
             # current_stim_start_fictrac_index = next_stim_start_fictrac_index
@@ -501,7 +503,7 @@ class ImagingDataObject():
             # print(current_stim_end_time)
             
             # Find Fictrac index and timestamp for when stimulus ends
-            while fictrac_timestamps[ts_pointer] <= current_stim_end_time:
+            while ts_pointer < len(fictrac_timestamps) and fictrac_timestamps[ts_pointer] <= current_stim_end_time:
                 # if fictrac_timestamps[ts_pointer] > 1200:
                 #     print(fictrac_timestamps[ts_pointer])
                 ts_pointer += 1
@@ -521,6 +523,7 @@ class ImagingDataObject():
             epoch_set_pos_0_frame_num = set_pos_0_frame_nums[e]
 
             epoch_fictrac_data = fictrac_data[prev_stim_end_fictrac_index : next_stim_start_fictrac_index].copy()
+            # print(f'{len(epoch_fictrac_data)} Fictrac frames')
             epoch_fictrac_data['integrated_xpos'] -= epoch_fictrac_data['integrated_xpos'][epoch_set_pos_0_frame_num]
             epoch_fictrac_data['integrated_ypos'] -= epoch_fictrac_data['integrated_ypos'][epoch_set_pos_0_frame_num]
             epoch_fictrac_data['integrated_heading'] = np.unwrap(epoch_fictrac_data['integrated_heading'])
