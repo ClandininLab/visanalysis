@@ -28,7 +28,7 @@ def generate_standard_timestamp(timestamps):
 
     return np.arange(min_time, max_time, mean_diff)
 
-def convert_iterables_to_tuples(l, recursive=False):
+def convert_iterables_to_tuples(l, recursive=False, exclude_strings=True):
     '''
     l: iterable of items, including iterables
 
@@ -37,4 +37,7 @@ def convert_iterables_to_tuples(l, recursive=False):
     if recursive:
         return [tuple(convert_iterables_to_tuples(i, recursive)) if isinstance(i, collections.Iterable) else i for i in l]
     else:
-        return [tuple(i) if isinstance(i, collections.Iterable) else i for i in l]
+        if exclude_strings:
+            return [tuple(i) if isinstance(i, collections.Iterable) and not isinstance(i, str) else i for i in l]
+        else:
+            return [tuple(i) if isinstance(i, collections.Iterable) else i for i in l]
