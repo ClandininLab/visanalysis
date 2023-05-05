@@ -417,7 +417,8 @@ class DataGUI(QWidget):
             from visanalysis.plugin import aodscope
             self.plugin = aodscope.AodScopePlugin()
         else:
-            self.plugin = h5io.BasePlugin()
+            from visanalysis.plugin import base
+            self.plugin = base.BasePlugin()
 
         self.plugin.parent_gui = self
 
