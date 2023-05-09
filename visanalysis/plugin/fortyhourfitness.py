@@ -279,7 +279,7 @@ class FortyHourDataObject(ImagingDataObject):
             ideal_frame_len = 1 / self.command_frame_rate * sample_rate  # datapoints
             ideal_frame_len_samples = int(np.round(1 / self.command_frame_rate * sample_rate))  # datapoints
             min_peak_distance = int(np.floor(ideal_frame_len * 1.8))  # datapoints
-            ups,peak_params = signal.find_peaks(frame_monitor, height=0.4, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
+            ups,peak_params = signal.find_peaks(frame_monitor, height=self.threshold, threshold=None, distance=min_peak_distance, prominence=0.04, width=None, wlen=None, rel_height=0.5, plateau_size=None)
             
             downs = []
             for i in range(len(ups)):
