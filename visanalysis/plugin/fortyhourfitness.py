@@ -106,16 +106,17 @@ class FortyHourFitnessPlugin(base_plugin.BasePlugin):
 
                 print('Attached timing data to series {}'.format(series_number))
             else:
-                print('WARNING! Required data files not found at {}'.format(data_directory))
+                print('WARNING! Required DAQ data files not found at {}'.format(data_directory))
 
             #### Fictrac
             fictrac_directory = os.path.join(series_directory, 'loco')
-            if os.listdir(fictrac_directory):
+            if os.path.exists(fictrac_directory):
                 fictrac_data_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x.endswith('.dat')]                
                 log_path = [os.path.join(fictrac_directory, x) for x in os.listdir(fictrac_directory) if x=='log.txt']
                 assert len(log_path) == 1, "log.txt must exist in Fictrac data directory."
                 log_path = log_path[0]
             else:
+                print(f'WARNING! Loco directory {fictrac_directory} not found.')
                 fictrac_data_path = []
                 log_path = None
             
