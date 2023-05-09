@@ -136,7 +136,7 @@ class FortyHourFitnessPlugin(base_plugin.BasePlugin):
                 # fictrac_data = fictrac_data.set_index('frame_count')
                 
                 fictrac_data = np.genfromtxt(fictrac_data_path, delimiter=",")
-                if len(cams_timing['cam_strobe_Fictrac']['exposure_onset']) < len(fictrac_data):
+                if 'cam_strobe_Fictrac' in cams_timing and len(cams_timing['cam_strobe_Fictrac']['exposure_onset']) < len(fictrac_data):
                     print('There are more Fictrac data lines than strobes.')
 
                 # log file
