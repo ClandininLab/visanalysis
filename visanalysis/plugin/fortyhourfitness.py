@@ -83,7 +83,7 @@ class FortyHourFitnessPlugin(base_plugin.BasePlugin):
                         if np.all(exposure_times < 0): # Noticed some spontaneous inverted strobe activity from Grasshopper camera... exception for such cases. Might be that GrassHopper strobe is inverted by default...? We invert in initializaiton now.
                             print(f"Camera {nickname} strobes were all inverted. Proceed with caution. Mean frame rate: {cams_timing[nickname]['frame_rate']}")
                         else:
-                            assert np.all(exposure_times > 0)
+                            assert np.all(exposure_times > 0), f"Camera {nickname} strobes were not all positive. Proceed with caution. Mean exposure time: {cams_timing[nickname]['exposure_time']}"
                                     
                 # # # # Attach metadata to epoch run group in data file # # #\
                 with h5py.File(file_path, 'r+') as experiment_file:
