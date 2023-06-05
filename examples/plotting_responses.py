@@ -10,9 +10,9 @@ from visanalysis.util import plot_tools
 import matplotlib.pyplot as plt
 import os
 
-experiment_file_directory = '/Users/mhturner/GitHub/visanalysis/examples/example_data/responses/bruker'
-experiment_file_name = '2021-11-29_eg'
-series_number = 6
+experiment_file_directory = '/Users/mhturner/GitHub/visanalysis/example_data/responses/Bruker'
+experiment_file_name = '2021-07-07'
+series_number = 1
 
 file_path = os.path.join(experiment_file_directory, experiment_file_name + '.hdf5')
 
@@ -37,7 +37,7 @@ print(protocol_ID)
 # epoch_parameters: list of dicts of all epoch parameters, one for each epoch (trial)
 epoch_parameters = ID.getEpochParameters()
 # Pass a param key to return a list of specified param values, one for each trial
-current_rv_ratio = ID.getEpochParameters('current_rv_ratio')
+current_rv_ratio = ID.getEpochParameters('current_intensity')
 
 # fly_metadata: dict
 fly_metadata = ID.getFlyMetadata()
@@ -54,11 +54,11 @@ print(sample_period)
 roi_set_names = ID.getRoiSetNames()
 roi_set_names
 # getRoiResponses() wants a ROI set name, returns roi_data (dict)
-roi_data = ID.getRoiResponses('glom')
+roi_data = ID.getRoiResponses('set_2')
 roi_data.keys()
 
 # See the ROI overlaid on top of the image
-ID.generateRoiMap(roi_name='glom', z=1)
+ID.generateRoiMap(roi_name='set_2', z=1)
 
 # Plot whole ROI response across entire series
 fh0, ax0 = plt.subplots(1, 1, figsize=(12, 4))
