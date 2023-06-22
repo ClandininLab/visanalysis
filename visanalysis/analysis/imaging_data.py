@@ -19,6 +19,7 @@ import pandas as pd
 import scipy.signal as signal
 from visanalysis.util import general_utils as gu
 from visanalysis.util import h5io, plot_tools
+import warnings
 
 
 class ImagingDataObject:
@@ -818,7 +819,7 @@ class ImagingDataObject:
 
         return roi_data
 
-    def getEpochResponseMatrix(self, region_response, dff=True, df=False):
+    def getEpochResponseMatrix(self, region_response, dff=True):
         """
         getEpochReponseMatrix(self, region_response, dff=True)
             Takes in long stack response traces and splits them up into each stimulus epoch
@@ -827,120 +828,71 @@ class ImagingDataObject:
                 dff: (Bool) convert from raw intensity value to dF/F based on mean of pre_time
 
             Returns:
-                time_vector (1d array): 1d array, time values for epoch_response traces (sec)
+                time_vector (1d array): 1d array, time values for response_matrix trace with longest epoch time (sec)
                 response_matrix (ndarray): response for each roi in each epoch.
-                    shape = (rois, epochs, frames per epoch)
+                    shape = (rois, epochs, frames per longest epoch)
+                    In the event that different epochs have different lenths, shorter epochs will be padded with nan in the response+matrix
         """
+        def get_image_inds(epoch_index):
+            '''find indices of image (volume) that fall within epoch given by [epoch_index] '''
+            image_inds = np.where(
+                np.logical_and(
+                    response_timing["time_vector"] < epoch_end_times[epoch_index],
+                    response_timing["time_vector"] >= epoch_start_times[epoch_index],
+                )
+            )[0]
+            return image_inds
+
+        def get_dff(epoch_raw_resp, epoch_index):
+            '''For a given [epoch_raw_response], and [epoch_index], return df/f for that epoch, using pre_time'''
+            # baseline is private to each roi
+            baseline = np.mean(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True)
+            with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
+                dff_resp = (epoch_raw_resp - baseline) / baseline
+            return dff_resp
+
         no_regions, t_dim = region_response.shape
 
-        run_parameters = self.getRunParameters()
         response_timing = self.getResponseTiming()
         stimulus_timing = self.getStimulusTiming()
 
-        epoch_start_times = (
-            stimulus_timing["stimulus_start_times"] - run_parameters["pre_time"]
-        )
-        epoch_end_times = (
-            stimulus_timing["stimulus_end_times"] + run_parameters["tail_time"]
-        )
-        epoch_time = (
-            run_parameters["pre_time"]
-            + run_parameters["stim_time"]
-            + run_parameters["tail_time"]
-        )  # sec
+        epoch_start_times = stimulus_timing["stimulus_start_times"] - np.array(self.getEpochParameters('pre_time'))
+        epoch_end_times = stimulus_timing["stimulus_end_times"] + np.array(self.getEpochParameters('tail_time'))
+        epoch_time = ( np.array(self.getEpochParameters('pre_time')) + 
+                        np.array(self.getEpochParameters('stim_time')) + 
+                        np.array(self.getEpochParameters('tail_time')) ) # sec
 
         # find how many acquisition frames correspond to pre, stim, tail time
-        epoch_frames = int(
-            epoch_time / response_timing["sample_period"]
-        )  # in acquisition frames
-        pre_frames = int(
-            run_parameters["pre_time"] / response_timing["sample_period"]
-        )  # in acquisition frames
-        time_vector = (
-            np.arange(0, epoch_frames) * response_timing["sample_period"]
-        )  # sec
+        epoch_frames = np.array([int(x) for x in epoch_time / response_timing["sample_period"]])  # in acquisition frames
+        pre_frames = np.array([int(x) for x in np.array(self.getEpochParameters('pre_time')) / response_timing["sample_period"]])  # in acquisition frames
+        
+        max_epoch_frames = np.max(epoch_frames)
+        time_vector = np.arange(0, max_epoch_frames) * response_timing["sample_period"] # sec
 
+        # Note response_matrix is padded by nan out to longest epoch length. Different epoch lengths may result in a jagged array with nans backfilled
         no_trials = len(epoch_start_times)
-        response_matrix = np.empty(
-            shape=(no_regions, no_trials, epoch_frames), dtype=float
-        )
+        response_matrix = np.empty(shape=(no_regions, no_trials, max_epoch_frames), dtype=float)
         response_matrix[:] = np.nan
-        cut_inds = np.empty(
-            0, dtype=int
-        )  # trial/epoch indices to cut from response_matrix
-        for idx, val in enumerate(epoch_start_times):
-            stack_inds = np.where(
-                np.logical_and(
-                    response_timing["time_vector"] < epoch_end_times[idx],
-                    response_timing["time_vector"] >= epoch_start_times[idx],
-                )
-            )[0]
-            if (
-                len(stack_inds) == 0
-            ):  # no imaging acquisitions happened during this epoch presentation
-                cut_inds = np.append(cut_inds, idx)
+       
+        for idx in range(no_trials):
+            current_trial_inds = get_image_inds(idx)
+            if len(current_trial_inds) == 0:
+                warnings.warn('SKIPPING TRIAL {}: No frames collected during trial'.format(idx))
                 continue
-            if np.any(stack_inds > region_response.shape[1]):
-                cut_inds = np.append(cut_inds, idx)
+
+            if len(current_trial_inds) < epoch_frames[idx]:
+                warnings.warn('SKIPPING TRIAL {}: Expected {} frames, found {} '.format(idx, epoch_frames[idx], len(current_trial_inds)))
                 continue
-            if idx == no_trials:
-                if (
-                    len(stack_inds) < epoch_frames
-                ):  # missed images for the end of the stimulus
-                    cut_inds = np.append(cut_inds, idx)
-                    print("Missed acquisition frames at the end of the stimulus!")
-                    continue
-            # pull out Roi values for these scans. shape of newRespChunk is (nROIs,nScans)
-            new_resp_chunk = region_response[:, stack_inds]
+
+            new_epoch_response = region_response[:, current_trial_inds]
 
             if dff:
-                # calculate baseline using pre frames
+                new_epoch_response = get_dff(new_epoch_response, idx)
+                response_matrix[:, idx, :epoch_frames[idx]] = new_epoch_response[:, :epoch_frames[idx]]
 
-                baseline = np.mean(
-                    new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True
-                )
-                # to dF/F
-                with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    new_resp_chunk = (new_resp_chunk - baseline) / baseline
-
-            if df:
-                # calculate baseline using pre frames, don't divide by f
-
-                baseline = np.mean(
-                    new_resp_chunk[:, 0:pre_frames], axis=1, keepdims=True
-                )
-                # to dF/F
-                with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    new_resp_chunk = new_resp_chunk - baseline
-
-            if epoch_frames > new_resp_chunk.shape[-1]:
-                print(
-                    "Warning: Size mismatch idx = {}".format(idx)
-                )  # the end of a response clipped off
-                response_matrix[:, idx, : new_resp_chunk.shape[-1]] = new_resp_chunk[
-                    :, 0:
-                ]
-            else:
-                response_matrix[:, idx, :] = new_resp_chunk[:, 0:epoch_frames]
-            # except:
-            #     print('Size mismatch idx = {}'.format(idx))  # the end of a response clipped off
-            #     print(response_matrix.shape)
-            #     print(new_resp_chunk.shape)
-            #     print(epoch_frames)
-            # cut_inds = np.append(cut_inds, idx)
-
-        if len(cut_inds) > 0:
-            print(
-                "Warning: cut {} epochs from epoch response matrix".format(
-                    len(cut_inds)
-                )
-            )
-        response_matrix = np.delete(
-            response_matrix, cut_inds, axis=1
-        )  # shape = (region, trial, time)
         return time_vector, response_matrix
+
+
 
     # # # #  # # # # # # # # # CONVENIENCE METHODS # # # # # # # # # # # # # # # # # # # # # # # # # #
 
