@@ -20,6 +20,7 @@ from visanalysis.plugin import base as base_plugin
 from visanalysis.util import h5io
 
 from visanalysis.analysis.imaging_data import ImagingDataObject
+from visanalysis.plugin.twentyfourhourfitness import TwentyFourHourDataObject
 
 class FortyHourFitnessPlugin(base_plugin.BasePlugin):
     def __init__(self):
@@ -233,13 +234,17 @@ class FortyHourDataObject(ImagingDataObject):
     """
     
     def getStimulusTiming(self,
-                          plot_trace_flag=False):
+                          plot_trace_flag=False,
+                          use_square_photodiodes=True):
         """
         Returns stimulus timing information based on photodiode voltage trace from frame tracker signal.
 
 
 
         """
+        if not use_square_photodiodes:
+            return TwentyFourHourDataObject.getStimulusTiming(self, plot_trace_flag=plot_trace_flag)
+        
         frame_monitor_channels, time_vector, sample_rate = self.getVoltageData()
         run_parameters = self.getRunParameters()
         epoch_parameters = self.getEpochParameters()

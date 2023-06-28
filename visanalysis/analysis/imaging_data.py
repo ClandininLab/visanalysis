@@ -521,7 +521,7 @@ class ImagingDataObject:
 
         return channel_timing[self.timing_channel_ind]
 
-    def getBehaviorTiming(self):
+    def getBehaviorTiming(self, use_camera_timestamps=False):
         """
         Get behavior timing (e.g. behavior camera exposures)
 
@@ -541,6 +541,8 @@ class ImagingDataObject:
                 if isinstance(behavior_group[x], h5py.Group) and x != "log_lines"
             ]
             for cam_name in cam_group_names:
+                if use_camera_timestamps and 'fictrac' in cam_name.lower():
+                    continue
                 cam_group = behavior_group[cam_name]
                 cam_timing = {}
                 cam_timing["frame_time"] = cam_group.get("exposure_onset")[:]  # sec
@@ -553,9 +555,9 @@ class ImagingDataObject:
                 x for x in cam_group_names if "fictrac" in x.lower()
             ]
             if (
-                len(fictrac_cam_group_candidates) == 0
-                and "fictrac_data" in behavior_group.keys()
-            ):
+                (use_camera_timestamps or len(fictrac_cam_group_candidates) == 0) 
+                and 'fictrac_data' in behavior_group.keys()
+            ):                
                 fictrac_header = behavior_group["fictrac_data"].attrs[
                     "fictrac_data_header"
                 ]
@@ -573,14 +575,17 @@ class ImagingDataObject:
 
             return behavior_timing
 
-    def getBehaviorData(self, stimulus_timing):
+    def getBehaviorData(self, stimulus_timing, use_camera_timestamps=False):
         """
         Get Fictrac data
         """
 
+        run_params = self.getRunParameters()
+        loco_pos_closed_loop = run_params.get('loco_pos_closed_loop', False)
+
         epoch_params = self.getEpochParameters()
         n_epochs = len(epoch_params)
-        behavior_timing = self.getBehaviorTiming()
+        behavior_timing = self.getBehaviorTiming(use_camera_timestamps=use_camera_timestamps)
 
         fictrac_timing_candidates = [
             x for x in behavior_timing.keys() if "fictrac" in x.lower()
@@ -599,6 +604,12 @@ class ImagingDataObject:
 
             if "fictrac_data" in behavior_group.keys():
                 header = behavior_group["fictrac_data"].attrs["fictrac_data_header"]
+                if behavior_group['fictrac_data'].shape[1] != len(header):
+                    n_headers_to_use = min(behavior_group['fictrac_data'].shape[1], len(header))
+                    print('WARNING! Fictrac data header length does not match data length. Using first {} headers.'.format(n_headers_to_use))
+                else:
+                    n_headers_to_use = len(header)
+
                 fictrac_data = pd.DataFrame(
                     behavior_group["fictrac_data"][:], columns=header
                 )
@@ -621,14 +632,17 @@ class ImagingDataObject:
                     if "set_pos_0" in log_group[line_name].keys()
                 ]
 
-                assert len(set_pos_0_groups) == n_epochs
+                if loco_pos_closed_loop:
+                    assert len(set_pos_0_groups) == n_epochs
 
-                set_pos_0_frame_nums = [
-                    set_pos_0_group.attrs["frame_num"]
-                    for set_pos_0_group, ts in set_pos_0_groups
-                ]  # 1:1 correspondence to epochs
+                    set_pos_0_frame_nums = [
+                        set_pos_0_group.attrs["frame_num"]
+                        for set_pos_0_group, ts in set_pos_0_groups
+                    ]  # 1:1 correspondence to epochs
 
         # Trim Fictrac timestamps and data to the min length of the two
+        print(f'{len(fictrac_timestamps)} strobes detected.')
+        print(f'{len(fictrac_data)} Fictrac data lines detected.')
         n_fictrac_valid_frames = min(len(fictrac_timestamps), len(fictrac_data))
         fictrac_timestamps = fictrac_timestamps[:n_fictrac_valid_frames]
         fictrac_data = fictrac_data[:n_fictrac_valid_frames]
@@ -647,7 +661,8 @@ class ImagingDataObject:
             n_epochs = len(stim_start_times)
 
         run_params = self.getRunParameters()
-        iti = run_params["pre_time"] + run_params["tail_time"]
+        epoch_params = self.getEpochParameters()
+        first_iti = epoch_params[0]["pre_time"] # + epoch_params[0]["tail_time"]
 
         fictrac_data_for_epoch = []
         ts_pointer = 0
@@ -655,7 +670,7 @@ class ImagingDataObject:
 
         # Epoch -1:
         current_stim_end_time = (
-            stim_start_times[0] - iti
+            stim_start_times[0] - first_iti
         )  # "stim end time" for epoch -1
         # Find Fictrac index and timestamp for when stimulus starts
         while fictrac_timestamps[ts_pointer] <= current_stim_end_time:
@@ -663,11 +678,11 @@ class ImagingDataObject:
         current_stim_end_fictrac_index = ts_pointer
         # current_stim_end_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
-        # next_stim_start_time = stim_start_times[0]
-        # # Find Fictrac index and timestamp for when next stimulus starts
-        # while fictrac_timestamps[ts_pointer] <= next_stim_start_time:
-        #     ts_pointer += 1
-        # next_stim_start_fictrac_index = ts_pointer
+        next_stim_start_time = stim_start_times[0]
+        # Find Fictrac index and timestamp for when next stimulus starts
+        while fictrac_timestamps[ts_pointer] <= next_stim_start_time:
+            ts_pointer += 1
+        next_stim_start_fictrac_index = ts_pointer
         # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
         print("Pulling out Fictrac data for each epoch...")
@@ -675,7 +690,7 @@ class ImagingDataObject:
             print(f"Epoch {e+1}/{n_epochs}")
             prev_stim_end_fictrac_index = current_stim_end_fictrac_index
             # prev_stim_end_fictrac_timestamp = current_stim_end_fictrac_timestamp
-            # current_stim_start_fictrac_index = next_stim_start_fictrac_index
+            current_stim_start_fictrac_index = next_stim_start_fictrac_index
             # current_stim_start_fictrac_timestamp = next_stim_start_fictrac_timestamp
 
             current_stim_start_time = stim_start_times[e]
@@ -699,43 +714,47 @@ class ImagingDataObject:
             if e < n_epochs - 1:
                 next_stim_start_time = stim_start_times[e + 1]
             else:
-                next_stim_start_time = current_stim_end_time + iti
+                next_stim_start_time = current_stim_end_time + epoch_params[e]['tail_time'] # last trial only gets its tail_time
             # Find Fictrac index and timestamp for when stimulus starts
             while (
                 ts_pointer < len(fictrac_timestamps)
                 and fictrac_timestamps[ts_pointer] <= next_stim_start_time
             ):
                 ts_pointer += 1
+                if ts_pointer == len(fictrac_timestamps):
+                    print("Reached end of fictrac_timestamps")
+
             next_stim_start_fictrac_index = ts_pointer
             # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
-            epoch_set_pos_0_frame_num = set_pos_0_frame_nums[e]
-
-            epoch_fictrac_data = fictrac_data[
-                prev_stim_end_fictrac_index:next_stim_start_fictrac_index
-            ].copy()
+            # define which Fictrac frame corresponds to the first frame of the epoch
+            if loco_pos_closed_loop:
+                epoch_start_frame_num = set_pos_0_frame_nums[e]
+                print(f'Epoch {e+1}/{n_epochs}: set_pos_0 occurred {epoch_start_frame_num-prev_stim_end_fictrac_index} frames since last stim end')
+            else:
+                epoch_start_frame_num = current_stim_start_fictrac_index
+                
+            epoch_fictrac_data = fictrac_data.iloc[prev_stim_end_fictrac_index:next_stim_start_fictrac_index].copy()
             # print(f'{len(epoch_fictrac_data)} Fictrac frames')
             epoch_fictrac_data["integrated_xpos"] -= epoch_fictrac_data[
                 "integrated_xpos"
-            ][epoch_set_pos_0_frame_num]
+            ][epoch_start_frame_num]
             epoch_fictrac_data["integrated_ypos"] -= epoch_fictrac_data[
                 "integrated_ypos"
-            ][epoch_set_pos_0_frame_num]
+            ][epoch_start_frame_num]
             epoch_fictrac_data["integrated_heading"] = np.unwrap(
                 epoch_fictrac_data["integrated_heading"]
             )
             epoch_fictrac_data["integrated_heading"] -= epoch_fictrac_data[
                 "integrated_heading"
-            ][epoch_set_pos_0_frame_num]
+            ][epoch_start_frame_num]
             epoch_fictrac_data["integrated_heading"] = (
                 np.mod((epoch_fictrac_data["integrated_heading"] + np.pi), np.pi * 2)
                 - np.pi
             )
 
             epoch_fictrac_timestamps = np.copy(
-                fictrac_timestamps[
-                    prev_stim_end_fictrac_index:next_stim_start_fictrac_index
-                ]
+                fictrac_timestamps[prev_stim_end_fictrac_index:next_stim_start_fictrac_index]
             )
             epoch_fictrac_timestamps -= current_stim_start_time
             fictrac_data_for_epoch.append(

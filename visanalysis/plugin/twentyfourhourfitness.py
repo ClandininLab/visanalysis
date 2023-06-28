@@ -89,7 +89,7 @@ class TwentyFourHourDataObject(ImagingDataObject):
         Returns stimulus timing information based on Visprotocol epoch times.
         """
 
-        run_parameters = self.getRunParameters()
+        # run_parameters = self.getRunParameters()
         epoch_parameters = self.getEpochParameters()
 
         stim_start_times = []
@@ -101,9 +101,9 @@ class TwentyFourHourDataObject(ImagingDataObject):
             n_epochs = len(epochs_group)
             for e, epoch in enumerate(epochs_group.values()):
                 
-                pre_time = epoch_parameters[e]['current_pre_time'] if 'current_pre_time' in epoch_parameters[e] else run_parameters['pre_time']
-                stim_time = epoch_parameters[e]['current_stim_time'] if 'current_stim_time' in epoch_parameters[e] else run_parameters['stim_time']
-                tail_time = epoch_parameters[e]['current_tail_time'] if 'current_tail_time' in epoch_parameters[e] else run_parameters['tail_time']
+                pre_time = epoch_parameters[e]['pre_time']
+                stim_time = epoch_parameters[e]['stim_time']
+                tail_time = epoch_parameters[e]['tail_time']
                 
                 # Stimulus start time
                 if 'epoch_unix_time' in epoch.attrs:
@@ -121,15 +121,13 @@ class TwentyFourHourDataObject(ImagingDataObject):
                     epoch_end_unix_time = epoch.attrs['epoch_end_unix_time']
                 else:
                     # For older VP data when epoch_end_unix_time was not saved, get stim_duration and add to epoch_unix_time
-                    if 'stim_time' in run_parameters:
-                        stim_duration = run_parameters['stim_time']
-                    elif 'current_stim_time' in epoch_parameters:
-                        stim_duration = epoch_parameters['current_stim_time']
+                    if 'stim_time' in epoch_parameters[e]:
+                        stim_duration = epoch_parameters[e]['stim_time']
                     else: # This will break when we only have 1 epoch, so hopefully we didn't enter this scenario
                         if e == n_epochs-1:
                             stim_duration = stim_end_times[-1] # Use previous epoch end time as a proxy
                         else:
-                            iti = run_parameters['pre_time'] + run_parameters['tail_time']
+                            iti = epoch_parameters[e]['pre_time'] + epoch_parameters[e]['tail_time']
                             stim_duration = epochs_group[f'epoch_{e+2:03d}'].attrs['epoch_unix_time'] - epoch_unix_time - iti
                     epoch_end_unix_time = stim_start_time + stim_duration + tail_time
                 stim_end_time = epoch_end_unix_time - tail_time
