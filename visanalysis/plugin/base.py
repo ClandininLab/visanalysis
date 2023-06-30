@@ -96,8 +96,8 @@ class BasePlugin():
         """
         all_series = []
         with h5py.File(file_path, 'r') as experiment_file:
-            for fly_id in list(experiment_file['/Flies'].keys()):
-                new_series = list(experiment_file['/Flies/{}/epoch_runs'.format(fly_id)].keys())
+            for fly_id in list(experiment_file['/Subjects'].keys()):
+                new_series = list(experiment_file['/Subjects/{}/epoch_runs'.format(fly_id)].keys())
                 all_series.append(new_series)
         all_series = [val for s in all_series for val in s]
         series = [int(x.split('_')[-1]) for x in all_series]
@@ -106,10 +106,10 @@ class BasePlugin():
     def getRoiSetPaths(self, file_path):
         all_roiset_paths = {}
         with h5py.File(file_path, 'r') as experiment_file:
-            for fly_id in list(experiment_file['/Flies'].keys()):
-                for sn in list(experiment_file['/Flies/{}/epoch_runs'.format(fly_id)].keys()):
-                    for roi_name in experiment_file['/Flies/{}/epoch_runs/{}/rois'.format(fly_id, sn)].keys():
-                        new_path = '/Flies/{}/epoch_runs/{}/rois/{}'.format(fly_id, sn, roi_name)
+            for fly_id in list(experiment_file['/Subjects'].keys()):
+                for sn in list(experiment_file['/Subjects/{}/epoch_runs'.format(fly_id)].keys()):
+                    for roi_name in experiment_file['/Subjects/{}/epoch_runs/{}/rois'.format(fly_id, sn)].keys():
+                        new_path = '/Subjects/{}/epoch_runs/{}/rois/{}'.format(fly_id, sn, roi_name)
                         new_key = '{}:{}:{}'.format(fly_id, sn, roi_name)
                         all_roiset_paths[new_key] = new_path
         return all_roiset_paths
