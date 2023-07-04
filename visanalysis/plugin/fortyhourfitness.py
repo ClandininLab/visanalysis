@@ -18,6 +18,7 @@ import scipy.signal as signal
 
 from visanalysis.plugin import base as base_plugin
 from visanalysis.util import h5io
+from visanalysis.util import general_utils as gu
 
 from visanalysis.analysis.imaging_data import ImagingDataObject
 from visanalysis.plugin.twentyfourhourfitness import TwentyFourHourDataObject
@@ -267,10 +268,20 @@ class FortyHourDataObject(ImagingDataObject):
             b, a = signal.butter(4, min(10*self.command_frame_rate, sample_rate/2-1), btype='low', fs=sample_rate)
             frame_monitor = signal.filtfilt(b, a, frame_monitor)
 
-            # Remove extreme values
-            extreme_thresholds = np.percentile(frame_monitor, [0.1, 99.9])
-            frame_monitor[frame_monitor<extreme_thresholds[0]] = np.nan
-            frame_monitor[frame_monitor>extreme_thresholds[1]] = np.nan
+            # High-pass filter frame_monitor trace
+            sos = signal.butter(2, 0.01, 'highpass', fs=sample_rate, output='sos')
+            frame_monitor = signal.sosfilt(sos, frame_monitor)            
+
+            # # Remove extreme values
+            # extreme_thresholds = np.percentile(frame_monitor, [0.1, 99.9])
+            # frame_monitor[frame_monitor<extreme_thresholds[0]] = np.nan
+            # frame_monitor[frame_monitor>extreme_thresholds[1]] = np.nan
+
+            # # Shift and normalize so frame monitor trace lives on [0 1] using top and bottom envelopes
+            # low_env, _ = gu.hl_envelopes(frame_monitor, dmin=1, dmax=1, split=False, get_interpolated=True)
+            # frame_monitor = frame_monitor - low_env
+            # _, high_env = gu.hl_envelopes(frame_monitor, dmin=1, dmax=1, split=False, get_interpolated=True)
+            # frame_monitor = frame_monitor / high_env
             
             # shift & normalize so frame monitor trace lives on [0 1]
             frame_monitor = frame_monitor - np.nanmin(frame_monitor)
