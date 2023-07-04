@@ -575,7 +575,7 @@ class ImagingDataObject:
 
             return behavior_timing
 
-    def getBehaviorData(self, stimulus_timing, use_camera_timestamps=False):
+    def getBehaviorData(self, stimulus_timing, use_camera_timestamps=False, quiet=True):
         """
         Get Fictrac data
         """
@@ -641,8 +641,9 @@ class ImagingDataObject:
                     ]  # 1:1 correspondence to epochs
 
         # Trim Fictrac timestamps and data to the min length of the two
-        print(f'{len(fictrac_timestamps)} strobes detected.')
-        print(f'{len(fictrac_data)} Fictrac data lines detected.')
+        if not quiet:
+            print(f'{len(fictrac_timestamps)} strobes detected.')
+            print(f'{len(fictrac_data)} Fictrac data lines detected.')
         n_fictrac_valid_frames = min(len(fictrac_timestamps), len(fictrac_data))
         fictrac_timestamps = fictrac_timestamps[:n_fictrac_valid_frames]
         fictrac_data = fictrac_data[:n_fictrac_valid_frames]
@@ -685,9 +686,11 @@ class ImagingDataObject:
         next_stim_start_fictrac_index = ts_pointer
         # next_stim_start_fictrac_timestamp = fictrac_timestamps[ts_pointer]
 
-        print("Pulling out Fictrac data for each epoch...")
+        if not quiet:
+            print("Pulling out Fictrac data for each epoch...")
         for e in range(n_epochs):
-            print(f"Epoch {e+1}/{n_epochs}")
+            if not quiet:
+                print(f"Epoch {e+1}/{n_epochs}")
             prev_stim_end_fictrac_index = current_stim_end_fictrac_index
             # prev_stim_end_fictrac_timestamp = current_stim_end_fictrac_timestamp
             current_stim_start_fictrac_index = next_stim_start_fictrac_index
@@ -730,36 +733,22 @@ class ImagingDataObject:
             # define which Fictrac frame corresponds to the first frame of the epoch
             if loco_pos_closed_loop:
                 epoch_start_frame_num = set_pos_0_frame_nums[e]
-                print(f'Epoch {e+1}/{n_epochs}: set_pos_0 occurred {epoch_start_frame_num-prev_stim_end_fictrac_index} frames since last stim end')
+                if not quiet:
+                    print(f'Epoch {e+1}/{n_epochs}: set_pos_0 occurred {epoch_start_frame_num-prev_stim_end_fictrac_index} frames since last stim end')
             else:
                 epoch_start_frame_num = current_stim_start_fictrac_index
                 
             epoch_fictrac_data = fictrac_data.iloc[prev_stim_end_fictrac_index:next_stim_start_fictrac_index].copy()
             # print(f'{len(epoch_fictrac_data)} Fictrac frames')
-            epoch_fictrac_data["integrated_xpos"] -= epoch_fictrac_data[
-                "integrated_xpos"
-            ][epoch_start_frame_num]
-            epoch_fictrac_data["integrated_ypos"] -= epoch_fictrac_data[
-                "integrated_ypos"
-            ][epoch_start_frame_num]
-            epoch_fictrac_data["integrated_heading"] = np.unwrap(
-                epoch_fictrac_data["integrated_heading"]
-            )
-            epoch_fictrac_data["integrated_heading"] -= epoch_fictrac_data[
-                "integrated_heading"
-            ][epoch_start_frame_num]
-            epoch_fictrac_data["integrated_heading"] = (
-                np.mod((epoch_fictrac_data["integrated_heading"] + np.pi), np.pi * 2)
-                - np.pi
-            )
+            epoch_fictrac_data["integrated_xpos"] -= epoch_fictrac_data["integrated_xpos"][epoch_start_frame_num]
+            epoch_fictrac_data["integrated_ypos"] -= epoch_fictrac_data["integrated_ypos"][epoch_start_frame_num]
+            epoch_fictrac_data["integrated_heading"] = np.unwrap(epoch_fictrac_data["integrated_heading"])
+            epoch_fictrac_data["integrated_heading"] -= epoch_fictrac_data["integrated_heading"][epoch_start_frame_num]
+            epoch_fictrac_data["integrated_heading"] = (np.mod((epoch_fictrac_data["integrated_heading"] + np.pi), np.pi * 2) - np.pi)
 
-            epoch_fictrac_timestamps = np.copy(
-                fictrac_timestamps[prev_stim_end_fictrac_index:next_stim_start_fictrac_index]
-            )
+            epoch_fictrac_timestamps = np.copy(fictrac_timestamps[prev_stim_end_fictrac_index:next_stim_start_fictrac_index])
             epoch_fictrac_timestamps -= current_stim_start_time
-            fictrac_data_for_epoch.append(
-                {"timestamps": epoch_fictrac_timestamps, "data": epoch_fictrac_data}
-            )
+            fictrac_data_for_epoch.append({"timestamps": epoch_fictrac_timestamps, "data": epoch_fictrac_data})
 
         return fictrac_data_for_epoch
 
