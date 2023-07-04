@@ -904,7 +904,7 @@ class ImagingDataObject:
 
     # # # #  # # # # # # # # # CONVENIENCE METHODS # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-    def getEpochGroupingsByParameters(self, parameter_key=None):
+    def getEpochGroupingsByParameters(self, parameter_key=None, replace_parameter_value=None):
         """
         getEpochGroupingsByParameters(sel f, parameter_key=None)
         Returns unique parameter combinations and indices of epochs that fall into each combination.
@@ -913,6 +913,9 @@ class ImagingDataObject:
                 -None (default): conditions on any parameter(s) containing "current" or "component"
                 -string: name of a single protocol parameter you want to split on
                 -List of strings: multiple params to split on
+            -replace_parameter_value:
+                -None (default): no replacement
+                -dict: dictionary of {param_name: [(param_value, replacement_value), ...]}
         Returns:
             unique_parameter_values: unique combinations of param values, in the order given by
                 parameter_key, that corresponds to the response results
@@ -926,6 +929,16 @@ class ImagingDataObject:
             list(gu.convert_iterables_to_tuples(pd.values()))
             for pd in self.getEpochParameterDicts(target_keys=parameter_key)
         ]
+
+        # replace parameter values
+        if replace_parameter_value is not None:
+            for key, values in replace_parameter_value.items():
+                key_idx = parameter_key.index(key)
+                for value in values:
+                    value_to_replace, value_replacement = value
+                    for i, pv in enumerate(parameter_values):
+                        if parameter_values[i][key_idx] == value_to_replace:
+                            parameter_values[i][key_idx] = value_replacement
 
         # Get unique parameter combinations
         unique_parameter_values = [
@@ -943,9 +956,9 @@ class ImagingDataObject:
 
         return unique_parameter_values, epoch_inds
 
-    def getTrialAverages(self, epoch_response_matrix, parameter_key=None):
+    def getTrialAverages(self, epoch_response_matrix, parameter_key=None, replace_parameter_value=None, min_samples=0):
         """
-        getTrialAverages(self, epoch_response_matrix, parameter_key=None)
+        getTrialAverages(self, epoch_response_matrix, parameter_key=None, replace_parameter_value=None)
         Returns trial averages and standard errors conditioned on some parameter value(s)
         Params:
             -epoch_response: ndarray, shape = (rois, epochs, time)
@@ -953,6 +966,12 @@ class ImagingDataObject:
                 -None (default): conditions on any parameter(s) containing "current" or "component"
                 -string: name of a single protocol parameter you want to split on
                 -List of strings: multiple params to split on
+            -replace_parameter_value: replace parameter values before grouping by epoch parameters and calculating averages
+                -None (default): no replacement
+                -dict: dictionary of {param_name: {param_value: replacement_value}}
+            -min_samples:
+                - int: minimum number of samples required to include in the average
+                - string: 'all' for requiring all epochs to be present at a given time point for the average
         Returns:
             unique_parameter_values: unique combinations of param values, in the order given by
                 parameter_key, that corresponds to the response results
@@ -965,7 +984,8 @@ class ImagingDataObject:
 
         # Get unique parameter combinations and epoch indices for each unique parameter combination
         unique_parameter_values, epoch_inds = self.getEpochGroupingsByParameters(
-            parameter_key
+            parameter_key,
+            replace_parameter_value
         )
 
         n_stimuli = len(unique_parameter_values)
@@ -981,32 +1001,31 @@ class ImagingDataObject:
         sem_response[:] = np.nan
 
         trial_response_by_stimulus = []
-        for p_ind, up in enumerate(
-            unique_parameter_values
-        ):  # For distinct stimulus parameterizations
-            pull_inds = epoch_inds[
-                p_ind
-            ]  # trial indices matching this parameterization
+        for p_ind, up in enumerate(unique_parameter_values):  # For distinct stimulus parameterizations
+            pull_inds = epoch_inds[p_ind]  # trial indices matching this parameterization
 
             # Check to see if any epochs are not in the epoch_response_matrix. Possibly because of a cut-short recording
             if np.any(np.array(pull_inds) >= epoch_response_matrix.shape[1]):
                 tmp = np.where(pull_inds >= epoch_response_matrix.shape[1])[0]
-                print(
-                    "Epoch(s) {} not included in epoch_response_matrix".format(
-                        pull_inds[tmp]
-                    )
-                )
+                print("Epoch(s) {} not included in epoch_response_matrix".format(pull_inds[tmp]))
                 pull_inds = pull_inds[pull_inds < epoch_response_matrix.shape[1]]
 
             with warnings.catch_warnings():  # Warning if nanmean run on an axis with ALL nans
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                mean_response[:, p_ind, :] = np.nanmean(
-                    epoch_response_matrix[:, pull_inds, :], axis=1
-                )
-                sem_response[:, p_ind, :] = np.nanstd(
-                    epoch_response_matrix[:, pull_inds, :], axis=1
-                ) / np.sqrt(len(pull_inds))
-            trial_response_by_stimulus.append(epoch_response_matrix[:, pull_inds, :])
+                unique_set_response_matrix = epoch_response_matrix[:, pull_inds, :]
+
+                min_samples_for_set = unique_set_response_matrix.shape[1] if min_samples == 'all' else min_samples
+                assert isinstance(min_samples_for_set, int), 'min_samples must be an integer or "all"'
+
+                # Remove time points with fewer than min_samples_for_set
+                if min_samples_for_set > 0:
+                    n_samples = np.sum(~np.isnan(unique_set_response_matrix), axis=1, keepdims=True)
+                    undersampled_inds = np.repeat(n_samples < min_samples_for_set, unique_set_response_matrix.shape[1], axis=1)
+                    unique_set_response_matrix[undersampled_inds] = np.nan # needs to be fixed
+
+                mean_response[:, p_ind, :] = np.nanmean(unique_set_response_matrix, axis=1)
+                sem_response[:, p_ind, :] = np.nanstd(unique_set_response_matrix, axis=1) / np.sqrt(len(pull_inds))
+            trial_response_by_stimulus.append(unique_set_response_matrix)
 
         return (
             unique_parameter_values,
