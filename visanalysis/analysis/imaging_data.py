@@ -186,9 +186,9 @@ class ImagingDataObject:
 
         return exp_metadata
 
-    def getFlyMetadata(self, metadata_key=None):
+    def getSubjectMetadata(self, metadata_key=None):
         """
-        Return fly metadata
+        Return subject metadata
 
         :metadata_key: name of metadata item to return. If None, return all metadata as dict. Default=None
 
@@ -196,23 +196,36 @@ class ImagingDataObject:
         with h5py.File(self.file_path, "r") as experiment_file:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
-            fly_group = epoch_run_group.parent.parent
+            subject_group = epoch_run_group.parent.parent
 
             if metadata_key:
                 assert (
-                    metadata_key in fly_group.attrs
+                    metadata_key in subject_group.attrs
                 ), 'metadata_key "{}" not found in metadata. \n'.format(
                     metadata_key
                 ) + "Available metadata keys are {}".format(
-                    [x for x in fly_group.attrs]
+                    [x for x in subject_group.attrs]
                 )
-                fly_metadata = fly_group.attrs[metadata_key]
+                subject_metadata = subject_group.attrs[metadata_key]
             else:  # Get all fly metadata in a dict
-                fly_metadata = {}
-                for attr_key in fly_group.attrs:
-                    fly_metadata[attr_key] = fly_group.attrs[attr_key]
+                subject_metadata = {}
+                for attr_key in subject_group.attrs:
+                    subject_metadata[attr_key] = subject_group.attrs[attr_key]
 
-        return fly_metadata
+        return subject_metadata
+
+    def getFlyMetadata(self, metadata_key=None):
+        """
+        Deprecated soon. Use getSubjectMetadata instead.
+
+        Return fly metadata
+
+        :metadata_key: name of metadata item to return. If None, return all metadata as dict. Default=None
+
+        """
+        print("WARNING: getFlyMetadata will soon be deprecated. Use getSubjectMetadata instead.")
+
+        return self.getSubjectMetadata(metadata_key=metadata_key)
 
     def getAcquisitionMetadata(self, metadata_key=None):
         """
