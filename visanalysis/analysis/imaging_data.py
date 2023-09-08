@@ -877,8 +877,10 @@ class ImagingDataObject:
         response_timing = self.getResponseTiming()
         stimulus_timing = self.getStimulusTiming()
 
-        epoch_start_times = stimulus_timing["stimulus_start_times"] - np.array(self.getEpochParameters('pre_time'))
-        epoch_end_times = stimulus_timing["stimulus_end_times"] + np.array(self.getEpochParameters('tail_time'))
+        no_trials = len(stimulus_timing["stimulus_end_times"])
+
+        epoch_start_times = stimulus_timing["stimulus_start_times"][:no_trials] - np.array(self.getEpochParameters('pre_time'))[:no_trials]
+        epoch_end_times = stimulus_timing["stimulus_end_times"] + np.array(self.getEpochParameters('tail_time'))[:no_trials]
         epoch_time = ( np.array(self.getEpochParameters('pre_time')) + 
                         np.array(self.getEpochParameters('stim_time')) + 
                         np.array(self.getEpochParameters('tail_time')) ) # sec
@@ -891,7 +893,6 @@ class ImagingDataObject:
         time_vector = np.arange(0, max_epoch_frames) * response_timing["sample_period"] # sec
 
         # Note response_matrix is padded by nan out to longest epoch length. Different epoch lengths may result in a jagged array with nans backfilled
-        no_trials = len(epoch_start_times)
         response_matrix = np.empty(shape=(no_regions, no_trials, max_epoch_frames), dtype=float)
         response_matrix[:] = np.nan
        
@@ -909,7 +910,8 @@ class ImagingDataObject:
 
             if dff:
                 new_epoch_response = get_dff(new_epoch_response, idx)
-                response_matrix[:, idx, :epoch_frames[idx]] = new_epoch_response[:, :epoch_frames[idx]]
+                
+            response_matrix[:, idx, :epoch_frames[idx]] = new_epoch_response[:, :epoch_frames[idx]]                
 
         return time_vector, response_matrix
 
