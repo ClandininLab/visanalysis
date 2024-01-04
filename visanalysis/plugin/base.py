@@ -165,7 +165,6 @@ class BasePlugin():
 
             roi_path = []
             for roipath_key, roipath_group in roi_set_group.items():
-                print(roipath_key)
                 if isinstance(roipath_group, h5py._hl.group.Group):
                     subpaths = []
                     for roi_subpath_group in roipath_group.values():
