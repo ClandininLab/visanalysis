@@ -17,6 +17,7 @@ setup(
                       'matplotlib',
                       'npTDMS',
                       'nibabel',
+                      'PyQt6',
                       'psutil'],
     extras_require={'gui':  ["PyQT6"]},
     include_package_data=True,
