@@ -231,6 +231,11 @@ def getVoltageRecording(filepath):
 
     # Load frame tracker signal and pull frame/epoch timing info
     data_frame = pd.read_csv(filepath + '.csv')
+    
+    # check if the dtype of last column matches that of the first column
+    # If so, it's likely that the last line was incomplete and should be skipped
+    if data_frame.dtypes.iloc[-1] != data_frame.dtypes.iloc[0]:
+        data_frame = pd.read_csv(filepath + '.csv', skipfooter=1, engine='python')
 
     time_vector = data_frame.get('Time(ms)').values / 1e3  # ->sec
 
