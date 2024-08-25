@@ -104,7 +104,12 @@ def readDataSet(file_path, series_number,
 
 def getDataType(file_path):
     with h5py.File(file_path, 'r+') as experiment_file:
-        return experiment_file.attrs['rig']
+        if 'rig' in experiment_file.attrs:
+            return experiment_file.attrs['rig']
+        elif 'rig_config' in experiment_file.attrs:
+            return experiment_file.attrs['rig_config']
+        else:
+            return None
 
 
 def find_series(name, obj, sn):
@@ -121,7 +126,7 @@ def getGroupsUnderSeries(file_path, series_number):
 
 
 def seriesExists(file_path, series_number):
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         find_partial = functools.partial(find_series, sn=series_number)
         epoch_run_group = experiment_file.visititems(find_partial)
         if epoch_run_group is None:
