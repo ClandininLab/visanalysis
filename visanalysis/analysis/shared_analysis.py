@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from visanalysis.util import plot_tools
 from collections.abc import Sequence
+import re, os
 
 
 def matchQuery(epoch_parameters, query):
@@ -87,6 +88,7 @@ def filterDataFiles(data_directory,
                     target_series_metadata={},
                     target_roi_series=[],
                     target_groups=[],
+                    target_file_series=None,
                     quiet=False):
     """
     Searches through a directory of visprotocol datafiles and finds datafiles/series that match the search values
@@ -98,36 +100,67 @@ def filterDataFiles(data_directory,
         -target_series_metadata: (dict) key-value pairs of target parameters to search for in the series run (run parameters)
         -target_roi_series: (list) required roi_series names
         -target_groups: (list) required names of groups under series group
+        -target_file_series: (dict) specific {file_name: [series_numbers]} combinations to include.
+                            Empty list means all series from all files are included.
+                            e.g., {'2025-01-15': [1,3], '2025-01-16': []} would include
+                            only series 1 and 3 from 2025-01-15.hdf5 and all series from 2025-01-16.hdf5.
+                            If provided, only these specific file/series combinations will be included
+        -quiet: (bool) suppress print statements
 
     Returns
         -matching_series: List of matching series dicts with all fly & run params as well as file name and series number
     """
-    fileNames = glob.glob(data_directory + "/*.hdf5")
+    files_in_dir = glob.glob(data_directory + "/*.hdf5")
+    files_in_dir_short = [os.path.splitext(os.path.basename(f))[0] for f in files_in_dir]
     if not quiet:
-        print('Found {} files in {}'.format(len(fileNames), data_directory))
+        print(f'Found {len(files_in_dir)} hdf5 files in {data_directory}')
+
+    # if target_file_series is None, include all files in directory
+    if target_file_series is None:
+        target_file_series = {fn: []  for fn in files_in_dir_short} # empty list means all series from this file are included
+    else: # ensure that target_file_series only includes files that exist in the directory
+        for fn in list(target_file_series.keys()):
+            if fn not in files_in_dir_short:
+                if not quiet:
+                    print(f'Warning: target_file_series includes file {fn} which does not exist in directory {data_directory}')
+                del target_file_series[fn]
+        if not quiet:
+            print(f'Filtered to {len(target_file_series)} files based on target_file_series.')
+
+    if not quiet:
+        print(f'target_file_series: {target_file_series}')
 
     # collect key/value pairs for all series in data directory
     all_series = []
-    for ind, fn in enumerate(fileNames):
+    for fn_short, series_list in target_file_series.items():
+        target_series_keys = [f"series_{str(k).zfill(3)}" for k in series_list] # convert integer to series_000 format string
+        fp = os.path.join(data_directory, fn_short + '.hdf5')
 
-        with h5py.File(fn, 'r') as data_file:
+        with h5py.File(fp, 'r') as data_file:
             for fly in data_file.get('Subjects'):
                 fly_metadata = {}
                 for f_key in data_file.get('Subjects').get(fly).attrs.keys():
                     fly_metadata[f_key] = data_file.get('Subjects').get(fly).attrs[f_key]
 
-                for epoch_run in data_file.get('Subjects').get(fly).get('epoch_runs'):
+                fly_series_keys = list(data_file.get('Subjects').get(fly).get('epoch_runs').keys())
+                for series_key in fly_series_keys:
+                    if target_series_keys and series_key not in target_series_keys:
+                        if not quiet:
+                            print(f'Skipping series {series_key} from file {fn_short} for fly {fly} as it is not in target series keys')
+                        continue  # skip this series if not in target series keys
+
+                    series_obj = data_file.get('Subjects').get(fly).get('epoch_runs').get(series_key)
                     series_metadata = {}
-                    for s_key in data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).attrs.keys():
-                        series_metadata[s_key] = data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).attrs[s_key]
+                    for s_key in series_obj.attrs.keys():
+                        series_metadata[s_key] = series_obj.attrs[s_key]
 
                     new_series = {**fly_metadata, **series_metadata}
-                    new_series['series'] = int(epoch_run.split('_')[1])
-                    new_series['file_name'] = fn.split('\\')[-1].split('.')[0]
+                    new_series['series'] = int(series_key.split('_')[1])
+                    new_series['file_name'] = fn_short
 
-                    existing_roi_sets = list(data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).get('rois').keys())
+                    existing_roi_sets = list(series_obj.get('rois').keys())
                     new_series['rois'] = existing_roi_sets
-                    existing_groups = list(data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).keys())
+                    existing_groups = list(series_obj.keys())
                     new_series['groups'] = existing_groups
 
                     all_series.append(new_series)
@@ -150,12 +183,104 @@ def filterDataFiles(data_directory,
 def checkAgainstTargetDict(target_dict, test_dict):
     for key in target_dict:
         if key in test_dict:
-            if not areValsTheSame(target_dict[key], test_dict[key]):
+            # Handle special comparison operators
+            if isinstance(target_dict[key], str):
+                # Handle inequality operators for numerical comparisons
+                if target_dict[key].startswith("<") or target_dict[key].startswith(">"):
+                    if not evaluateInequality(target_dict[key], test_dict[key]):
+                        return False  # Inequality comparison failed
+                # Handle regex matching
+                elif target_dict[key].startswith("re:"):
+                    if not evaluateRegex(target_dict[key][3:], test_dict[key]):
+                        return False  # Regex comparison failed
+                # Handle substring matching
+                elif target_dict[key].startswith("in:"):
+                    if not evaluateSubstring(target_dict[key][3:], test_dict[key]):
+                        return False  # Substring comparison failed
+                # Standard equality check
+                elif not areValsTheSame(target_dict[key], test_dict[key]):
+                    return False  # Different values
+            # Standard equality check for non-string target values
+            elif not areValsTheSame(target_dict[key], test_dict[key]):
                 return False  # Different values
         else:
             return False  # Target key not in this series at all
 
     return True
+
+
+def evaluateInequality(inequality_str, test_val):
+    """
+    Evaluate inequality expressions like "<5" or ">10" against a test value.
+    
+    Args:
+        inequality_str: String starting with "<" or ">" followed by a number
+        test_val: Value to compare against (should be numeric)
+        
+    Returns:
+        Boolean result of the inequality comparison
+    """
+    if not isinstance(test_val, (int, float)):
+        try:
+            test_val = float(test_val)
+        except (ValueError, TypeError):
+            return False  # Cannot compare non-numeric values
+    
+    try:
+        if inequality_str.startswith("<"):
+            target_val = float(inequality_str[1:].strip())
+            return test_val < target_val
+        elif inequality_str.startswith(">"):
+            target_val = float(inequality_str[1:].strip())
+            return test_val > target_val
+        else:
+            return False  # Not a valid inequality
+    except (ValueError, TypeError):
+        return False  # Could not parse the numeric part of the inequality
+
+
+def evaluateRegex(pattern, test_val):
+    """
+    Check if test_val matches the given regex pattern.
+    
+    Args:
+        pattern: Regular expression pattern string
+        test_val: Value to test against the pattern
+        
+    Returns:
+        Boolean indicating whether the test_val matches the pattern
+    """
+    try:
+        # Convert test_val to string if it's not already
+        if not isinstance(test_val, str):
+            test_val = str(test_val)
+        
+        # Perform regex match
+        return bool(re.search(pattern, test_val))
+    except (TypeError, re.error):
+        return False  # Invalid regex pattern or comparison failed
+
+
+def evaluateSubstring(substring, test_val):
+    """
+    Check if substring is contained within the test_val.
+    
+    Args:
+        substring: String to search for
+        test_val: Value to search within
+        
+    Returns:
+        Boolean indicating whether substring is found in test_val
+    """
+    try:
+        # Convert test_val to string if it's not already
+        if not isinstance(test_val, str):
+            test_val = str(test_val)
+            
+        # Case-insensitive substring check
+        return substring.casefold() in test_val.casefold()
+    except (TypeError, AttributeError):
+        return False  # Cannot perform substring comparison
 
 
 def areValsTheSame(target_val, test_val):

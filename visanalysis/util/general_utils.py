@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.stats import sem
-import collections
+from collections.abc import Iterable
 
 def nansem(a, axis=0, ddof=1, nan_policy='omit'):
     return sem(a, axis, ddof, nan_policy)
@@ -83,9 +83,9 @@ def convert_iterables_to_tuples(l, recursive=False, exclude_strings=True):
     Converts all iterables inside to tuples
     '''
     if recursive:
-        return [tuple(convert_iterables_to_tuples(i, recursive)) if isinstance(i, collections.Iterable) else i for i in l]
+        return [tuple(convert_iterables_to_tuples(i, recursive)) if isinstance(i, Iterable) else i for i in l]
     else:
         if exclude_strings:
-            return [tuple(i) if isinstance(i, collections.Iterable) and not isinstance(i, str) else i for i in l]
+            return [tuple(i) if isinstance(i, Iterable) and not isinstance(i, str) else i for i in l]
         else:
-            return [tuple(i) if isinstance(i, collections.Iterable) else i for i in l]
+            return [tuple(i) if isinstance(i, Iterable) else i for i in l]

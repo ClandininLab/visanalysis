@@ -122,7 +122,7 @@ def getGroupsUnderSeries(file_path, series_number):
     with h5py.File(file_path, 'r+') as experiment_file:
         find_partial = functools.partial(find_series, sn=series_number)
         epoch_run_group = experiment_file.visititems(find_partial)
-        return epoch_run_group.keys()
+        return [k for k in epoch_run_group.keys()]
 
 
 def seriesExists(file_path, series_number):

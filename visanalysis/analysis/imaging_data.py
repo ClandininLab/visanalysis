@@ -40,12 +40,14 @@ class ImagingDataObject:
         "threshold",
         "frame_slop",
         "command_frame_rate",
+        "stimulus_timing",
     ]
 
     def __init__(self, file_path, series_number, quiet=False, cfg_dict=None):
         self.file_path = file_path
         self.series_number = series_number
         self.quiet = quiet
+        self.stimulus_timing = None  # cache for stimulus timing
 
         self.colors = [mcolors.to_rgb(x) for x in list(mcolors.TABLEAU_COLORS)[:20]]
 
@@ -269,12 +271,31 @@ class ImagingDataObject:
             epoch_run_group = experiment_file.visititems(find_partial)
             stimulus_timing_group = epoch_run_group["stimulus_timing"]
 
+            voltage_time_vector = stimulus_timing_group.get("time_vector")[:]
+            voltage_sample_rate = stimulus_timing_group.attrs["sample_rate"]
             voltage_trace = stimulus_timing_group.get("frame_monitor")[:]
+
+            # One of the two axes of voltage_trace should match the length of the time vector
+            if voltage_trace.shape[0] == len(voltage_time_vector):
+                # voltage_trace is (n time points, n channels), transpose it
+                voltage_trace = voltage_trace.T
+            elif voltage_trace.shape[1] == len(voltage_time_vector):
+                # voltage_trace is (n channels, n time points), do nothing
+                pass
+            else:
+                raise ValueError(
+                    f"Voltage trace shape {voltage_trace.shape} does not match time vector length {len(voltage_time_vector)}."
+                )
+            
+            # If both axes match the time vector length, raise a warning.
+            if voltage_trace.shape[0] == voltage_trace.shape[1]:
+                warnings.warn(
+                    f"Voltage trace shape {voltage_trace.shape} has both axes matching time vector length {len(voltage_time_vector)}. Assuming (n channels, n time points)."
+                )
+
             if len(voltage_trace.shape) < 2:
                 # dummy dim for single channel photodiode
                 voltage_trace = voltage_trace[np.newaxis, :]
-            voltage_time_vector = stimulus_timing_group.get("time_vector")[:]
-            voltage_sample_rate = stimulus_timing_group.attrs["sample_rate"]
 
         return voltage_trace, voltage_time_vector, voltage_sample_rate
 
@@ -319,29 +340,61 @@ class ImagingDataObject:
             frame_offsets[frame_ind] = frame_times[0, frame_ind] - frame_times[0, 0]
         return frame_offsets
 
-    def getStimulusTiming(self, plot_trace_flag=False):
+    def getStimulusTiming(self, low_perc=0.1, high_perc=99.9, 
+                          plot_trace_flag=False, min_epoch_separation_s=None, cache=True):
         """
         Returns stimulus timing information based on photodiode voltage trace from frame tracker signal.
 
-
-
+        Args:
+            low_perc: lower percentile for clipping frame monitor trace to avoid aberrant spikes
+            high_perc: upper percentile for clipping frame monitor trace to avoid aberrant spikes
+            plot_trace_flag: if True, save plots of frame monitor trace and detected stimulus timing
+            min_epoch_separation_s: minimum separation between epochs in seconds. If None, use 0.9 * (min_pre_time + min_tail_time) from run parameters. Default=None
+            cache: if True, return cached stimulus timing if it exists, and if it doesn't exist, compute it and save. Default=True
         """
+
+        if self.stimulus_timing is not None and cache:
+            return self.stimulus_timing[self.timing_channel_ind]
+
         frame_monitor_channels, time_vector, sample_rate = self.getVoltageData()
         run_parameters = self.getRunParameters()
         epoch_parameters = self.getEpochParameters()
 
         # If more than two voltage channels, just take the LAST two in the list as photodiodes
         if len(frame_monitor_channels) > 2:
+            print(f'{len(frame_monitor_channels)} voltage channels detected. Using last two as photodiodes.')
             frame_monitor_channels = frame_monitor_channels[-2:]
 
         if len(frame_monitor_channels.shape) == 1:
             frame_monitor_channels = frame_monitor_channels[np.newaxis, :]
 
-        minimum_epoch_separation = (
-            0.9
-            * (run_parameters["pre_time"] + run_parameters["tail_time"])
-            * sample_rate
-        )
+        # If there are NaNs at the end of the frame monitor trace, trim them
+        if np.any(np.isnan(frame_monitor_channels[:, -1])):
+            print("Trimming NaN from end of frame monitor trace.")
+            frame_monitor_channels = frame_monitor_channels[:, :-1]
+            time_vector = time_vector[:-1]
+
+        # To account for aberrant spikes, only take the central portion of the voltage trace
+        low_bound = np.percentile(frame_monitor_channels, low_perc, axis=1)
+        high_bound = np.percentile(frame_monitor_channels, high_perc, axis=1)
+        frame_monitor_channels = np.clip(frame_monitor_channels, low_bound[:, np.newaxis], high_bound[:, np.newaxis])
+
+        if plot_trace_flag:
+            plt.figure(figsize=(60, 8))
+            plt.plot(time_vector, frame_monitor_channels.T)
+            plt.savefig('frame_monitor_channels.png')
+            print(f'Frame threshold: {self.threshold}')
+
+        if min_epoch_separation_s is not None:
+            minimum_epoch_separation = min_epoch_separation_s * sample_rate
+        else:
+            min_pre_time = min([ep['pre_time'] for ep in epoch_parameters])
+            min_tail_time = min([ep['tail_time'] for ep in epoch_parameters])
+            minimum_epoch_separation = (
+                0.9
+                * (min_pre_time + min_tail_time)
+                * sample_rate
+            )
 
         num_channels = frame_monitor_channels.shape[0]
         channel_timing = []
@@ -357,6 +410,15 @@ class ImagingDataObject:
             # shift & normalize so frame monitor trace lives on [0 1]
             frame_monitor = frame_monitor - np.min(frame_monitor)
             frame_monitor = frame_monitor / np.max(frame_monitor)
+
+            # assert that frame monitor trace lives on [0 1]
+            assert sum(np.isnan(frame_monitor)) == 0 , f"Frame monitor trace contains {sum(np.isnan(frame_monitor))} NaNs"
+            assert np.min(frame_monitor) >= 0 and np.max(frame_monitor) <= 1, "Frame monitor trace is outside [0 1]"
+
+            if plot_trace_flag:
+                plt.figure(figsize=(60, 8))
+                plt.plot(time_vector, frame_monitor)
+                plt.savefig(f'frame_monitor_ch{ch}.png')
 
             # find frame flip times
             V_orig = frame_monitor[0:-2]
@@ -374,6 +436,19 @@ class ImagingDataObject:
                 + 1
             )
             frame_times = np.sort(np.append(ups, downs))
+
+            assert np.abs(len(ups) - len(downs)) < 2, "Photodiode signal is wonky"
+            if len(frame_times) < 2:
+                warnings.warn(
+                    f"Warning! Photodiode signal channel {ch} has {len(frame_times)} detected frames. Skipping channel."
+                )
+                channel_timing.append(None)
+                if ch == self.timing_channel_ind:
+                    warnings.warn(
+                        f"Warning! Changing timing_channel_ind from {self.timing_channel_ind} to {self.timing_channel_ind+1}."
+                    )
+                    self.timing_channel_ind += 1
+                continue
 
             # Use frame flip times to find stimulus start times
             stimulus_start_frames = np.append(
@@ -495,16 +570,17 @@ class ImagingDataObject:
                     )
                 )
                 inter_stim_starts = np.diff(stimulus_start_times)
-                print(
-                    "Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec".format(
-                        inter_stim_starts.min(),
-                        np.median(inter_stim_starts),
-                        inter_stim_starts.max(),
-                        run_parameters["stim_time"]
-                        + run_parameters["pre_time"]
-                        + run_parameters["tail_time"],
+                if len(inter_stim_starts) > 0:
+                    print(
+                        "Stim start to start: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec".format(
+                            inter_stim_starts.min(),
+                            np.median(inter_stim_starts),
+                            inter_stim_starts.max(),
+                            run_parameters["stim_time"]
+                            + run_parameters["pre_time"]
+                            + run_parameters["tail_time"],
+                        )
                     )
-                )
                 print(
                     "Stim duration: [min={:.3f}, median={:.3f}, max={:.3f}] / parameterized = {:.3f} sec".format(
                         stim_durations.min(),
@@ -531,6 +607,9 @@ class ImagingDataObject:
                 "frame_rate": frame_rate,
             }
             channel_timing.append(new_dict)
+            
+            if cache:
+                self.stimulus_timing = channel_timing
 
         return channel_timing[self.timing_channel_ind]
 
@@ -840,13 +919,23 @@ class ImagingDataObject:
 
         return roi_data
 
-    def getEpochResponseMatrix(self, region_response, dff=True):
+    def getEpochResponseMatrix(self, region_response, normalization='dff', baseline_period='pre'):
         """
-        getEpochReponseMatrix(self, region_response, dff=True)
+        getEpochReponseMatrix(self, region_response, normalization='dff', baseline_period='pre')
             Takes in long stack response traces and splits them up into each stimulus epoch
             Params:
                 region_response: Matrix of region/voxel responses. Shape = (n regions, time)
-                dff: (Bool) convert from raw intensity value to dF/F based on mean of pre_time
+                normalization: (str) Method to normalize the signal
+                    'dff': convert from raw intensity value to dF/F based on mean of pre_time
+                    'zscore': z-score the signal based on mean and std of pre_time
+                    'mean_subtraction': subtract the mean of baseline period from the signal
+                    'none': no normalization, use raw signal
+                baseline_period: (str or list) Period to use for calculating baseline
+                    'pre': use pre_time period only for baseline (default)
+                    'whole': use entire epoch (pre + stim + post) for baseline
+                    list of 2-tuples: e.g. [(-2.0, -0.5), (5.0, 6.0)] specifying time
+                                        windows in seconds relative to stimulus onset (0s).
+                                        Pre-stimulus times are negative.
 
             Returns:
                 time_vector (1d array): 1d array, time values for response_matrix trace with longest epoch time (sec)
@@ -864,18 +953,71 @@ class ImagingDataObject:
             )[0]
             return image_inds
 
-        def get_dff(epoch_raw_resp, epoch_index):
-            '''For a given [epoch_raw_response], and [epoch_index], return df/f for that epoch, using pre_time'''
-            # baseline is private to each roi
-            baseline = np.mean(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True)
-            with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
-                dff_resp = (epoch_raw_resp - baseline) / baseline
-            return dff_resp
+        def normalize_signal(epoch_raw_resp, epoch_index, method, baseline_period):
+            '''For a given [epoch_raw_response], [epoch_index], [method], and [baseline_period], return normalized signal'''
+            # Calculate baseline based on specified period
+            if baseline_period == 'pre':
+                # Use only pre-stimulus period for baseline
+                baseline = np.nanmean(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True)
+                baseline_std = np.nanstd(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True) if method == 'zscore' else None
+            elif baseline_period == 'whole':
+                # Use entire epoch for baseline
+                baseline = np.nanmean(epoch_raw_resp, axis=1, keepdims=True)
+                baseline_std = np.nanstd(epoch_raw_resp, axis=1, keepdims=True) if method == 'zscore' else None
+            elif isinstance(baseline_period, list):
+                # Use specified time windows for baseline
+                baseline_data = []
+                for start_time, end_time in baseline_period:
+                    # Convert time windows to frame indices relative to stimulus onset
+                    start_frame = int((start_time + pre_frames[epoch_index] * response_timing["sample_period"]) / response_timing["sample_period"])
+                    end_frame = int((end_time + pre_frames[epoch_index] * response_timing["sample_period"]) / response_timing["sample_period"])
+                    
+                    # Ensure frame indices are within bounds
+                    start_frame = max(0, start_frame)
+                    end_frame = min(epoch_raw_resp.shape[1], end_frame)
+                    
+                    if start_frame < end_frame:
+                        baseline_data.append(epoch_raw_resp[:, start_frame:end_frame])
+                
+                if baseline_data:
+                    # Concatenate all baseline windows and calculate statistics
+                    baseline_concat = np.concatenate(baseline_data, axis=1)
+                    baseline = np.nanmean(baseline_concat, axis=1, keepdims=True)
+                    baseline_std = np.nanstd(baseline_concat, axis=1, keepdims=True) if method == 'zscore' else None
+                else:
+                    warnings.warn("No valid baseline windows found. Using pre-stimulus period instead.")
+                    baseline = np.nanmean(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True)
+                    baseline_std = np.nanstd(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True) if method == 'zscore' else None
+            else:
+                warnings.warn(f"Invalid baseline_period '{baseline_period}'. Using 'pre' instead.")
+                baseline = np.nanmean(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True)
+                baseline_std = np.nanstd(epoch_raw_resp[:, 0:pre_frames[epoch_index]], axis=1, keepdims=True) if method == 'zscore' else None
+            
+            if method == 'dff':
+                with warnings.catch_warnings():  # Warning to catch divide by zero or nan. Will return nan or inf
+                    norm_resp = (epoch_raw_resp - baseline) / baseline
+            elif method == 'zscore':
+                # Avoid division by zero
+                baseline_std[baseline_std == 0] = np.nan
+                with warnings.catch_warnings():
+                    norm_resp = (epoch_raw_resp - baseline) / baseline_std
+            elif method == 'mean_subtraction':
+                norm_resp = epoch_raw_resp - baseline
+            else:  # 'none'
+                norm_resp = epoch_raw_resp
+                
+            return norm_resp
 
+        # Check valid normalization method
+        valid_methods = ['dff', 'zscore', 'mean_subtraction', 'none']
+        if normalization not in valid_methods:
+            warnings.warn(f"Invalid normalization method '{normalization}'. Using 'dff' instead.")
+            normalization = 'dff'
+            
         no_regions, t_dim = region_response.shape
 
         response_timing = self.getResponseTiming()
-        stimulus_timing = self.getStimulusTiming()
+        stimulus_timing = self.getStimulusTiming(plot_trace_flag=False)
 
         no_trials = len(stimulus_timing["stimulus_end_times"])
 
@@ -904,12 +1046,13 @@ class ImagingDataObject:
 
             if len(current_trial_inds) < epoch_frames[idx]:
                 warnings.warn('SKIPPING TRIAL {}: Expected {} frames, found {} '.format(idx, epoch_frames[idx], len(current_trial_inds)))
+                response_matrix[:, idx, :epoch_frames[idx]] = 0
                 continue
 
             new_epoch_response = region_response[:, current_trial_inds]
 
-            if dff:
-                new_epoch_response = get_dff(new_epoch_response, idx)
+            # Apply normalization
+            new_epoch_response = normalize_signal(new_epoch_response, idx, normalization, baseline_period)
                 
             response_matrix[:, idx, :epoch_frames[idx]] = new_epoch_response[:, :epoch_frames[idx]]                
 
@@ -971,7 +1114,7 @@ class ImagingDataObject:
 
         return unique_parameter_values, epoch_inds
 
-    def getTrialAverages(self, epoch_response_matrix, parameter_key=None, replace_parameter_value=None, min_samples=0):
+    def getTrialAverages(self, epoch_response_matrix, parameter_key=None, replace_parameter_value=None, min_samples=0, return_epoch_inds=False):
         """
         getTrialAverages(self, epoch_response_matrix, parameter_key=None, replace_parameter_value=None)
         Returns trial averages and standard errors conditioned on some parameter value(s)
@@ -987,12 +1130,13 @@ class ImagingDataObject:
             -min_samples:
                 - int: minimum number of samples required to include in the average
                 - string: 'all' for requiring all epochs to be present at a given time point for the average
+            -return_epoch_inds: bool, if True return the epoch indices for each stimulus condition
         Returns:
-            unique_parameter_values: unique combinations of param values, in the order given by
+            -unique_parameter_values: unique combinations of param values, in the order given by
                 parameter_key, that corresponds to the response results
-            mean_response: ndarray, trial-average responses, shape = (n_regions x stim condition x time)
-            sem_response: ndarray, trial-S.E.M. responses, shape = (n_regions x stim condition x time)
-            trial_response_by_stimulus: list of ndarrays
+            -mean_response: ndarray, trial-average responses, shape = (n_regions x stim condition x time)
+            -sem_response: ndarray, trial-S.E.M. responses, shape = (n_regions x stim condition x time)
+            -trial_response_by_stimulus: list of ndarrays
                 (len=n_stimuli) of trial responses for each stim condition, each shape = (n_regions x trials x time)
 
         """
@@ -1042,6 +1186,14 @@ class ImagingDataObject:
                 sem_response[:, p_ind, :] = np.nanstd(unique_set_response_matrix, axis=1) / np.sqrt(len(pull_inds))
             trial_response_by_stimulus.append(unique_set_response_matrix)
 
+        if return_epoch_inds:
+            return (
+                unique_parameter_values,
+                mean_response,
+                sem_response,
+                trial_response_by_stimulus,
+                epoch_inds
+            )
         return (
             unique_parameter_values,
             mean_response,

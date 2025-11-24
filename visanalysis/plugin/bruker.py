@@ -5,6 +5,7 @@ https://github.com/ClandininLab/visanalysis
 mhturner@stanford.edu
 """
 import os
+import warnings
 import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
@@ -95,8 +96,30 @@ class BrukerPlugin(base_plugin.BasePlugin):
 
         return mask
 
-    def attachData(self, experiment_file_name, file_path, data_directory):
-        for series_number in self.getSeriesNumbers(file_path):
+    def attachData(self, experiment_file_name, file_path, data_directory, series_numbers=None, 
+                   stimulus_timing_ch_names=None, behavior_timing_ch_names=None):
+        """
+        Attach metadata to the data file.
+        args
+            experiment_file_name: string, name of the data file
+            file_path: string, full path to the data file
+            data_directory: string, path to the data directory
+            series_numbers: int or [int], list of series numbers to attach data to. If None, attach to all series.
+            stimulus_timing_ch_names: list of strings, channel names for stimulus timing. If None, use all available voltage channels.
+            behavior_timing_ch_names: list of strings, channel names for behavior timing. If None, no behavior timing will be attached.
+        """
+        if series_numbers is None:
+            series_numbers = self.getSeriesNumbers(file_path)
+        else:
+            if isinstance(series_numbers, int):
+                series_numbers = [series_numbers]
+            elif isinstance(series_numbers, list):
+                pass
+            else:
+                raise ValueError('series_numbers must be int or list of ints')
+            
+        # # # # Attach metadata to data file # # #
+        for series_number in series_numbers:
             # # # # Retrieve metadata from files in data directory # # #
             file_basename = 'TSeries-' + experiment_file_name.replace('-', '') + '-' + ('00' + str(series_number))[-3:]
             metadata_filepath = os.path.join(data_directory, file_basename)
@@ -105,6 +128,7 @@ class BrukerPlugin(base_plugin.BasePlugin):
                 v_rec_suffix = '_Cycle00001_VoltageRecording_001'
                 voltage_basepath = os.path.join(data_directory, file_basename + v_rec_suffix)
                 voltage_recording, time_vector, sample_rate = getVoltageRecording(voltage_basepath)
+                print(f'Voltage recording type: {type(voltage_recording)}')
 
                 # TODO: pick frame monitor(s) out of voltage recording traces based on name, or alt by input number
                 frame_monitor = voltage_recording
@@ -235,14 +259,23 @@ def getVoltageRecording(filepath):
     # check if the dtype of last column matches that of the first column
     # If so, it's likely that the last line was incomplete and should be skipped
     if data_frame.dtypes.iloc[-1] != data_frame.dtypes.iloc[0]:
+        warnings.warn("Last row of CSV has inconsistent data types. It will be skipped. Using Python engine to read CSV.")
         data_frame = pd.read_csv(filepath + '.csv', skipfooter=1, engine='python')
 
     time_vector = data_frame.get('Time(ms)').values / 1e3  # ->sec
 
-    frame_monitor = []  # get responses in all active channels
-    for ac in active_channels:
-        frame_monitor.append(data_frame.get(' ' + ac).values)
-    frame_monitor = np.vstack(frame_monitor)
+    # Get all columns except the time column
+    frame_monitor = data_frame.drop(columns=['Time(ms)'], errors='ignore')
+
+    # frame_monitor = []  # get responses in all active channels
+    # for ac in active_channels:
+    #     frame_monitor.append(data_frame.get(' ' + ac).values)
+    # frame_monitor = np.vstack(frame_monitor)
+
+    # # If the last row contains NaNs, remove it
+    # if np.any(np.isnan(frame_monitor[:, -1])):
+    #     frame_monitor = frame_monitor[:, :-1]
+    #     time_vector = time_vector[:-1]
 
     return frame_monitor, time_vector, sample_rate
 

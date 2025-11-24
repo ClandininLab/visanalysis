@@ -8,6 +8,7 @@ setup(
     author='Max Turner',
     author_email='mhturner@stanford.edu',
     packages=['visanalysis'],
+    #package_dir = {"": "src"},
     install_requires=[
                       'numpy',
                       'h5py',
