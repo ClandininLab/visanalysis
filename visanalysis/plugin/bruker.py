@@ -144,7 +144,15 @@ class BrukerPlugin(base_plugin.BasePlugin):
 
                     # make sure subgroups exist for stimulus and response timing
                     stimulus_timing_group = epoch_run_group.require_group('stimulus_timing')
-                    h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                    
+                    # Save frame_monitor as numpy array and headers as attribute
+                    if isinstance(frame_monitor, pd.DataFrame):
+                        headers = frame_monitor.columns.values.astype('S')
+                        h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor.values)
+                        stimulus_timing_group['frame_monitor'].attrs['column_names'] = headers
+                    else:
+                        h5io.overwriteDataSet(stimulus_timing_group, 'frame_monitor', frame_monitor)
+                        
                     h5io.overwriteDataSet(stimulus_timing_group, 'time_vector', time_vector)
                     stimulus_timing_group.attrs['sample_rate'] = sample_rate
 
