@@ -646,19 +646,88 @@ class ImagingDataObject:
             fictrac_cam_group_candidates = [
                 x for x in cam_group_names if "fictrac" in x.lower()
             ]
+            
+            # Try to get fictrac timing from frame monitor (FT strobe) first, if not available/requested, fall back to other methods
+            ft_strobe_found = False
+            stimulus_timing_group = epoch_run_group["stimulus_timing"]
+            if "frame_monitor" in stimulus_timing_group:
+                frame_monitor_dset = stimulus_timing_group["frame_monitor"]
+                
+                # Check for channel/column names
+                channel_names = None
+                for attr_name in ['column_names', 'header', 'channels']:
+                    if attr_name in frame_monitor_dset.attrs:
+                        channel_names = frame_monitor_dset.attrs[attr_name]
+                        break
+                
+                if channel_names is not None:
+                     # Handle bytes vs string issues if necessary, assuming mostly string or bytes that decode to string
+                    try:
+                        channel_names = [x.decode('utf-8') if isinstance(x, bytes) else x for x in channel_names]
+                        # Strip whitespace
+                        channel_names = [x.strip() for x in channel_names]
+                    except Exception:
+                        pass # Keep as is if decode fails
+
+                    if "FT Strobe" in channel_names:
+                        strobe_ind = np.where(np.array(channel_names) == "FT Strobe")[0][0]
+                        voltage_trace = frame_monitor_dset[:]
+                        if voltage_trace.shape[0] == len(channel_names):
+                            voltage_trace = voltage_trace.T
+                        
+                        ft_voltage = voltage_trace[:, strobe_ind]
+                        time_vector = stimulus_timing_group.get("time_vector")[:]
+                        sample_rate = stimulus_timing_group.attrs["sample_rate"]
+
+                        # Process strobe signal
+                        # Normalize to 0-1
+                        ft_voltage = ft_voltage - np.min(ft_voltage)
+                        if np.max(ft_voltage) > 0:
+                            ft_voltage = ft_voltage / np.max(ft_voltage)
+                        
+                        threshold = 0.5
+                        # Find potential frame flips
+                        V_orig = ft_voltage[0:-2]
+                        V_shift = ft_voltage[1:-1]
+                        ups = np.where(np.logical_and(V_orig < threshold, V_shift >= threshold))[0] + 1
+                        downs = np.where(np.logical_and(V_orig >= threshold, V_shift < threshold))[0] + 1
+                        
+                        # Use ups (rising edges) as start of frame exposure
+                        frame_times = time_vector[ups] # sec
+
+                        if len(frame_times) > 1:
+                            frame_rate = 1 / np.mean(np.diff(frame_times))
+                            behavior_timing["fictrac"] = {}
+                            behavior_timing["fictrac"]["frame_time"] = frame_times
+                            behavior_timing["fictrac"]["frame_rate"] = frame_rate
+                            ft_strobe_found = True
+                            if not self.quiet:
+                                print(f"Found FT Strobe signal. Detected {len(frame_times)} frames at {frame_rate:.2f} Hz avg.")
+
             if (
+                not ft_strobe_found and
                 (use_camera_timestamps or len(fictrac_cam_group_candidates) == 0) 
                 and 'fictrac_data' in behavior_group.keys()
             ):                
                 fictrac_header = behavior_group["fictrac_data"].attrs[
                     "fictrac_data_header"
                 ]
-                frame_time = (
-                    behavior_group["fictrac_data"][
-                        :, np.where(fictrac_header == "timestamp")[0][0]
-                    ]
-                    / 1000
-                )
+                # Decode byte strings if necessary
+                if len(fictrac_header) > 0 and isinstance(fictrac_header[0], bytes):
+                     fictrac_header = [x.decode('utf-8') for x in fictrac_header]
+                
+                # Check directly in list instead of using np.where which is more fragile
+                if "timestamp" in fictrac_header:
+                    ts_ind = fictrac_header.index("timestamp")
+                    frame_time = (
+                        behavior_group["fictrac_data"][:, ts_ind]
+                        / 1000
+                    )
+                else:
+                    print(f"Warning: 'timestamp' not found in fictrac header: {fictrac_header}")
+                    # Fallback or skip?
+                    return behavior_timing
+
                 frame_rate = 1 / np.mean(np.diff(frame_time))
 
                 behavior_timing["fictrac"] = {}
