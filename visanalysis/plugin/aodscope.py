@@ -224,7 +224,7 @@ class AodScopePlugin(base_plugin.BasePlugin):
         poi_series_number = []
         xyt_series_number = []
         for series_number in self.getSeriesNumbers(file_path):
-            with h5py.File(file_path, 'r+') as experiment_file:
+            with h5py.File(file_path, 'r') as experiment_file:
                 find_partial = functools.partial(find_series, sn=series_number)
                 epoch_run_group = experiment_file.visititems(find_partial)
                 acquisition_group = epoch_run_group['acquisition']

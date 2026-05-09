@@ -328,7 +328,7 @@ class ImagingDataObject:
 
         returns: frame_offsets (sec), temporal sample offset for each z slice component of a volume
         """
-        with h5py.File(self.file_path, "r+") as experiment_file:
+        with h5py.File(self.file_path, "r") as experiment_file:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             series_group = experiment_file.visititems(find_partial)
             acquisition_group = series_group["acquisition"]

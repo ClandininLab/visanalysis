@@ -53,7 +53,7 @@ def changeAttribute(file_path, group_path, attr_key, attr_val):
 
 def getAttributesFromGroup(file_path, group_path):
     # see https://github.com/CCampJr/LazyHDF5
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         group = experiment_file[group_path]
         attr_dict = {}
         for at in group.attrs:
@@ -93,7 +93,7 @@ def overwriteDataSet(group, name, data):
 def readDataSet(file_path, series_number,
                 group_name,
                 dataset_name):
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         find_partial = functools.partial(find_series, sn=series_number)
         epoch_run_group = experiment_file.visititems(find_partial)
         data_matrix = epoch_run_group[group_name].get(dataset_name)[:]
@@ -103,7 +103,7 @@ def readDataSet(file_path, series_number,
 
 
 def getDataType(file_path):
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         if 'rig' in experiment_file.attrs:
             return experiment_file.attrs['rig']
         elif 'rig_config' in experiment_file.attrs:
@@ -119,7 +119,7 @@ def find_series(name, obj, sn):
 
 
 def getGroupsUnderSeries(file_path, series_number):
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         find_partial = functools.partial(find_series, sn=series_number)
         epoch_run_group = experiment_file.visititems(find_partial)
         return [k for k in epoch_run_group.keys()]
@@ -146,7 +146,7 @@ def createEpochRunGroup(file_path, fly_id, series_number):
 
 
 def getAvailableRoiSetNames(file_path, series_number):
-    with h5py.File(file_path, 'r+') as experiment_file:
+    with h5py.File(file_path, 'r') as experiment_file:
         find_partial = functools.partial(find_series, sn=series_number)
         epoch_run_group = experiment_file.visititems(find_partial)
         rois_group = epoch_run_group.get('rois')
