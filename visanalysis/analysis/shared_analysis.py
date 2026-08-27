@@ -9,6 +9,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from visanalysis.util import plot_tools
+from visanalysis.util import h5io
 from collections.abc import Sequence
 
 
@@ -111,23 +112,28 @@ def filterDataFiles(data_directory,
     for ind, fn in enumerate(fileNames):
 
         with h5py.File(fn, 'r') as data_file:
-            for fly in data_file.get('Subjects'):
+            for fly in h5io.getSubjectIds(data_file):
+                subject_parent = h5io.getSubjectParentName(data_file)
                 fly_metadata = {}
-                for f_key in data_file.get('Subjects').get(fly).attrs.keys():
-                    fly_metadata[f_key] = data_file.get('Subjects').get(fly).attrs[f_key]
+                for f_key in data_file.get(subject_parent).get(fly).attrs.keys():
+                    fly_metadata[f_key] = data_file.get(subject_parent).get(fly).attrs[f_key]
 
-                for epoch_run in data_file.get('Subjects').get(fly).get('epoch_runs'):
+                runs_group = h5io.getSeriesParentGroup(data_file, fly)
+                if runs_group is None:
+                    continue
+                for epoch_run in runs_group:
                     series_metadata = {}
-                    for s_key in data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).attrs.keys():
-                        series_metadata[s_key] = data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).attrs[s_key]
+                    for s_key in runs_group.get(epoch_run).attrs.keys():
+                        series_metadata[s_key] = runs_group.get(epoch_run).attrs[s_key]
 
                     new_series = {**fly_metadata, **series_metadata}
-                    new_series['series'] = int(epoch_run.split('_')[1])
+                    new_series['series'] = int(epoch_run.split('_')[-1])
                     new_series['file_name'] = fn.split('\\')[-1].split('.')[0]
 
-                    existing_roi_sets = list(data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).get('rois').keys())
+                    rois_group = runs_group.get(epoch_run).get('rois')
+                    existing_roi_sets = list(rois_group.keys()) if rois_group is not None else []
                     new_series['rois'] = existing_roi_sets
-                    existing_groups = list(data_file.get('Subjects').get(fly).get('epoch_runs').get(epoch_run).keys())
+                    existing_groups = list(runs_group.get(epoch_run).keys())
                     new_series['groups'] = existing_groups
 
                     all_series.append(new_series)

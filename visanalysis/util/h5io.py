@@ -9,6 +9,52 @@ import numpy as np
 import functools
 
 
+# Stimpack renamed the group that holds a subject's series from 'epoch_runs' to 'series'.
+# Both layouts are in the wild, so every accessor resolves the name instead of hard-coding it.
+# ('find_series' below is a substring match on the series group name itself, so it already
+#  works under either parent, which is why the write path needed no change.)
+SERIES_PARENT_GROUP_NAMES = ('epoch_runs', 'series')
+
+# Likewise, older files call the subject collection 'Flies' rather than 'Subjects'.
+SUBJECT_PARENT_GROUP_NAMES = ('Subjects', 'Flies')
+
+
+def getSubjectParentName(experiment_file):
+    """Name of the top-level group holding subjects ('Subjects', or legacy 'Flies')."""
+    for name in SUBJECT_PARENT_GROUP_NAMES:
+        if name in experiment_file:
+            return name
+    return None
+
+
+def getSeriesParentName(subject_group):
+    """Name of the group holding one subject's series ('epoch_runs', or newer 'series')."""
+    for name in SERIES_PARENT_GROUP_NAMES:
+        if name in subject_group:
+            return name
+    return None
+
+
+def getSeriesParentGroup(experiment_file, subject_id):
+    """Group holding one subject's series, under either naming scheme. None if absent."""
+    subject_parent = getSubjectParentName(experiment_file)
+    if subject_parent is None:
+        return None
+    subject_group = experiment_file[subject_parent].get(str(subject_id))
+    if subject_group is None:
+        return None
+    series_parent = getSeriesParentName(subject_group)
+    return None if series_parent is None else subject_group[series_parent]
+
+
+def getSubjectIds(experiment_file):
+    """List of subject ids, under either naming scheme."""
+    subject_parent = getSubjectParentName(experiment_file)
+    if subject_parent is None:
+        return []
+    return list(experiment_file[subject_parent].keys())
+
+
 def updateSeriesAttribute(file_path, series_number,
                           attr_key, attr_val):
     """User facing, compared to  changeAttribute"""
@@ -140,7 +186,9 @@ def createEpochRunGroup(file_path, fly_id, series_number):
         print('Series {} already exists in {} - ABORTING'.format(series_number, file_path))
     else:
         with h5py.File(file_path, 'r+') as experiment_file:
-            fly_group = experiment_file['/Flies/{}/epoch_runs'.format(fly_id)]
+            fly_group = getSeriesParentGroup(experiment_file, fly_id)
+            if fly_group is None:
+                raise KeyError('No series group found for subject {} in {}'.format(fly_id, file_path))
             fly_group.create_group('series_{}'.format(str(series_number).zfill(3)))
             print('Added series {} to fly {} in {}'.format(series_number, fly_id, file_path))
 
