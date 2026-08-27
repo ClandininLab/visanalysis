@@ -130,3 +130,9 @@ dmypy.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Personal rig configs and anything credential-shaped. Shared configs are committed
+# deliberately by name; everything else under rig_specific/configs/ stays local.
+rig_specific/configs/local_*
+rig_specific/configs/*.local.json
+rig_specific/configs/*.secret.*

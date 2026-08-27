@@ -13,13 +13,10 @@ module is the driver that parses each DAQ file once, slices it, and writes the p
 https://github.com/ClandininLab/visanalysis
 """
 import os
-import xml.etree.ElementTree as ET
 import numpy as np
 import pandas as pd
 import h5py
-import skimage.io as io
 import functools
-import nibabel as nib
 import json
 import datetime
 import matplotlib.pyplot as plt
@@ -28,7 +25,6 @@ import scipy.signal as signal
 
 from visanalysis.plugin import base as base_plugin
 from visanalysis.util import h5io
-from visanalysis.util import general_utils as gu
 from visanalysis.util import daq_ensemble as de
 
 from visanalysis.analysis.imaging_data import ImagingDataObject

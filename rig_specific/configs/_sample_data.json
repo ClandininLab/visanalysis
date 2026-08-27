@@ -1,0 +1,10 @@
+{
+  "name": "_sample_data",
+  "plugin": "fortyhourfitness",
+  "target": { "path": "./_attached", "date_format": "%Y-%m-%d" },
+  "sources": [
+    { "name": "rig",    "type": "local", "path": "./data/rig",    "date_format": "%Y-%m-%d" },
+    { "name": "assist", "type": "local", "path": "./data/assist", "date_format": "%Y%m%d" }
+  ],
+  "attach": { "ensemble": "auto" }
+}
