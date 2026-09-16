@@ -95,7 +95,13 @@ BLOCK_DURATION_TOL_S = 0.50
 BLOCK_DURATION_TOL_FRAC = 0.002
 UNIQUENESS_FACTOR = 4.0
 GAP_MATCH_TOL_S = 0.50
-T0_SPREAD_MAX_S = 0.25
+# The t0 anchors are (trial time - camera edge time) at the start and end of every block, so
+# their spread measures how consistently the camera starts and stops relative to the trials -
+# tens to hundreds of ms of ordinary jitter. The smallest mis-assignment this check could ever
+# catch is a one-trial shift, so the tolerance is derived from the trial period rather than
+# fixed; a flat 0.25 s sat inside the jitter band and failed on healthy data.
+T0_SPREAD_MAX_S = 0.5              # absolute floor
+T0_SPREAD_TRIAL_FRAC = 0.5         # ... or half a trial period, whichever is larger
 FICTRAC_CLOCK_GAP_TOL_SAMP = 2.0
 FICTRAC_CLOCK_SPAN_TOL_S = 0.100
 FICTRAC_CLOCK_SPAN_TOL_PPM = 100e-6
@@ -1060,8 +1066,28 @@ def associateBlocks(plan, evidence, series_candidates, edges, thresholds=None):
 
 
 def computeT0(evidence, plan, edges):
-    """Estimate unix time of DAQ sample 0 from every block edge, and report the spread."""
-    anchors = []
+    """Estimate unix time of DAQ sample 0, from the camera STARTS only.
+
+    Each block gives two candidate anchors, (trial time - camera edge time):
+
+      start:  the camera's acquisition is armed by stimpack's send_trigger at run start, so
+              the first strobe follows a hardware event and lands within one frame period of
+              it. Measured on two real ensembles, the start anchors of different blocks agree
+              to 1.7 ms and 4.3 ms.
+      end:    the camera is told to stop in software during teardown, after the last trial and
+              before run_end, and that latency is not deterministic. Measured 13 ms on one run
+              and 249 ms on the next - a 236 ms difference within a single session.
+
+    Only the starts define t0. Folding the stops in lets a variable teardown drag the estimate
+    (measured: 59 ms), which then makes the *other* anchors look wrong, because they are all
+    referred to the very number they contributed to.
+
+    returns (t0, start_anchor_spread, all_anchors) where all_anchors is a list of
+    {'series', 'kind', 'unix', 'offset_s'} - offset_s being how far that camera edge sits from
+    its trial boundary under the chosen t0. Positive at a start means the camera began before
+    the first trial; positive at an end means it ran past the last trial.
+    """
+    starts, ends = [], []
     rise, fall = edges[plan.segmenter]
     for block, sn in zip(plan.blocks, plan.series_for_block):
         ev = evidence.get(sn)
@@ -1070,13 +1096,32 @@ def computeT0(evidence, plan, edges):
         r = rise[(rise >= block.sample_lo) & (rise < block.sample_hi)]
         f = fall[(fall >= block.sample_lo) & (fall < block.sample_hi)]
         if r.size and ev.first_epoch_unix is not None:
-            anchors.append(ev.first_epoch_unix - r[0] / plan.sample_rate)
+            starts.append((sn, float(ev.first_epoch_unix - r[0] / plan.sample_rate)))
         if f.size and ev.last_epoch_end_unix is not None:
-            anchors.append(ev.last_epoch_end_unix - f[-1] / plan.sample_rate)
-    if not anchors:
+            ends.append((sn, float(ev.last_epoch_end_unix - f[-1] / plan.sample_rate)))
+
+    if starts:
+        values = [v for _, v in starts]
+        t0 = float(np.median(values))
+        spread = float(max(values) - min(values))
+        source = 'camera_start_trigger'
+    elif ends:
+        # No usable starts: fall back to the stops and say so, since they are the weaker signal.
+        values = [v for _, v in ends]
+        t0 = float(np.median(values))
+        spread = float(max(values) - min(values))
+        source = 'camera_stop_fallback'
+        plan.warn('No camera-start anchors available; DAQ t=0 estimated from camera stops, '
+                  'whose latency is not deterministic.')
+    else:
         return None, None, []
-    anchors = [float(a) for a in anchors]
-    return float(np.mean(anchors)), float(max(anchors) - min(anchors)), anchors
+
+    plan.diagnostics['t0_source'] = source
+    all_anchors = ([{'series': sn, 'kind': 'start', 'unix': v, 'offset_s': t0 - v}
+                    for sn, v in starts]
+                   + [{'series': sn, 'kind': 'end', 'unix': v, 'offset_s': t0 - v}
+                      for sn, v in ends])
+    return t0, spread, all_anchors
 
 
 def readFictracBoundaryClock(evidence, series_a, series_b):
@@ -1195,15 +1240,47 @@ def validatePlan(plan, evidence, edges, strict=True, thresholds=None):
     t0, spread, anchors = computeT0(evidence, plan, edges)
     plan.t0_unix, plan.t0_spread_s, plan.t0_anchors = t0, spread, anchors
     if spread is not None:
-        status = 'pass' if spread <= th['T0_SPREAD_MAX_S'] else 'fail'
-        # As with V6: a single block legitimately extends past its series at both ends, which
-        # pushes the two anchors apart without saying anything about the segmentation.
+        # The spread is now over camera STARTS only, which follow a hardware trigger and agree
+        # to a few ms in practice. Scale the tolerance to the trial period anyway: the error
+        # this can actually reveal is a block assigned to the wrong series, which shows up as
+        # at least a one-trial shift.
+        periods = [evidence[sn].epoch_span_s / max(1, evidence[sn].n_epoch_groups)
+                   for sn in plan.series_for_block
+                   if evidence[sn].epoch_span_s and evidence[sn].n_epoch_groups]
+        tol = th['T0_SPREAD_MAX_S']
+        if periods:
+            tol = max(tol, th['T0_SPREAD_TRIAL_FRAC'] * min(periods))
+        status = 'pass' if spread <= tol else 'fail'
         if status == 'fail' and plan.n_blocks == 1:
             status = 'warn'
             plan.warn('DAQ t=0 anchors span {:.3f} s; single block, so not gated.'.format(spread))
+        n_starts = sum(1 for a in anchors if a['kind'] == 'start')
         plan.addCheck('V8_t0_spread', status,
-                      measured=round(spread, 4), tolerance=th['T0_SPREAD_MAX_S'],
-                      message='{} anchors for DAQ t=0'.format(len(anchors)))
+                      measured=round(spread, 4), tolerance=round(tol, 4),
+                      message='{} camera-start anchors ({}); tolerance is half the {:.3f} s '
+                              'trial period'.format(
+                                  n_starts, plan.diagnostics.get('t0_source', '?'),
+                                  min(periods) if periods else float('nan')))
+
+        # Camera teardown latency: reported, never gated. It is genuinely variable (measured
+        # 13 ms and 249 ms in one session) and says nothing about whether the split is right,
+        # but a stop BEFORE its last trial would be physically impossible and worth surfacing.
+        for anchor in anchors:
+            if anchor['kind'] != 'end':
+                continue
+            latency = anchor['offset_s']
+            if latency < 0:
+                plan.addCheck('S_camera_stop_series_{}'.format(anchor['series']), 'warn',
+                              measured=round(latency, 4), tolerance=0.0,
+                              message='camera stopped BEFORE its last trial ended, which should '
+                                      'not happen; check the block boundary for this series')
+                plan.warn('Series {}: camera stopped {:.4f} s before its last trial ended.'.format(
+                    anchor['series'], -latency))
+            else:
+                plan.addCheck('S_camera_stop_series_{}'.format(anchor['series']), 'info',
+                              measured=round(latency, 4), tolerance=None,
+                              message='camera ran {:.0f} ms past the last trial (teardown '
+                                      'latency)'.format(latency * 1000))
 
     # V9 - FicTrac's own clock predicts the boundary independently of the DAQ
     for k in range(plan.n_blocks - 1):
