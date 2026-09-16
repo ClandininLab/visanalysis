@@ -84,6 +84,23 @@ class FortyHourFitnessPlugin(base_plugin.BasePlugin):
         candidates = de.findDaqCandidates(data_directory, series_numbers)
         overrides = de.loadEnsembleOverride(ensemble_override, data_directory)
 
+        # A series with no trials almost always means the hdf5 uses a schema we do not
+        # recognise, not a genuinely empty run. Say so up front: every downstream gate depends
+        # on trial times, so the symptom would otherwise surface far from the cause.
+        empty = [sn for sn in series_numbers if evidence[sn].n_epoch_groups == 0]
+        if empty:
+            with h5py.File(file_path, 'r') as experiment_file:
+                find_partial = functools.partial(h5io.find_series, sn=empty[0])
+                group = experiment_file.visititems(find_partial)
+                present = list(group.keys()) if group is not None else []
+            raise de.EnsembleGroupingError(
+                'Series {} contain no trials. Expected a group named one of {}, but series {} '
+                'has {}. This hdf5 was probably written by a stimpack version whose schema is '
+                'not yet recognised; visanalysis.util.h5io lists the names it knows.'.format(
+                    empty, h5io.TRIAL_PARENT_GROUP_NAMES, empty[0], present),
+                {'series': empty, 'known_names': list(h5io.TRIAL_PARENT_GROUP_NAMES),
+                 'found_groups': present})
+
         report = {'hdf5_file': os.path.basename(file_path),
                   'data_directory': data_directory,
                   'attach_utc': datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z',
@@ -820,7 +837,7 @@ def computeStimulusTiming(frame_monitor_channels, sample_rate, minimum_epoch_sep
 
             ax = frame_monitor_figure.add_subplot(gs1[0, 1])
             ax.plot(stim_durations, 'b.')
-            n_epochs_for_axis = (run_parameters or {}).get('num_epochs', len(stim_durations))
+            n_epochs_for_axis = h5io.getNumTrials(run_parameters or {}, len(stim_durations))
             if _st_scalar is not None:
                 ax.axhline(y=_st_scalar, xmin=0, xmax=n_epochs_for_axis, color='k', linestyle='-', marker='None', alpha=0.50)
             else:

@@ -298,8 +298,11 @@ def readSeriesEvidence(file_path, data_directory, series_numbers):
                 if series_number not in series_numbers:
                     continue
                 group = runs_group[series_name]
-                epochs = group['epochs'] if 'epochs' in group else {}
-                epoch_names = sorted(epochs.keys()) if len(epochs) else []
+                # 'epochs' pre-1.0.0, 'trials' from stimpack 1.0.0 on.
+                epochs = h5io.getTrialsGroup(group)
+                epoch_names = sorted(epochs.keys()) if epochs is not None else []
+                if epochs is None:
+                    epochs = {}
 
                 pre_time = _scalar(_attr(group, 'pre_time'), 0.0)
                 tail_time = _scalar(_attr(group, 'tail_time'), 0.0)
@@ -310,13 +313,13 @@ def readSeriesEvidence(file_path, data_directory, series_numbers):
                     e_pre = _scalar(ea.get('pre_time'), pre_time)
                     e_tail = _scalar(ea.get('tail_time'), tail_time)
                     e_stim = _scalar(ea.get('stim_time'), None)
-                    start = ea.get('epoch_unix_time')
+                    start = h5io.getTrialStartUnixTime(ea)
                     if start is None:
                         onsets.append(np.nan)
                         offsets.append(np.nan)
                         continue
                     start = float(start)
-                    end = ea.get('epoch_end_unix_time')
+                    end = h5io.getTrialEndUnixTime(ea)
                     if end is None and e_stim is not None:
                         # Same fallback as twentyfourhourfitness.getStimulusTiming.
                         end = start + e_pre + e_stim + e_tail
@@ -328,10 +331,12 @@ def readSeriesEvidence(file_path, data_directory, series_numbers):
                 if epoch_names:
                     fa = epochs[epoch_names[0]].attrs
                     la = epochs[epoch_names[-1]].attrs
-                    if 'epoch_unix_time' in fa:
-                        first_epoch = float(fa['epoch_unix_time'])
-                    if 'epoch_end_unix_time' in la:
-                        last_epoch_end = float(la['epoch_end_unix_time'])
+                    first_raw = h5io.getTrialStartUnixTime(fa)
+                    if first_raw is not None:
+                        first_epoch = float(first_raw)
+                    last_raw = h5io.getTrialEndUnixTime(la)
+                    if last_raw is not None:
+                        last_epoch_end = float(last_raw)
                     elif not np.isnan(offsets[-1]):
                         last_epoch_end = offsets[-1] + (_scalar(la.get('tail_time'), tail_time) or 0.0)
 
@@ -371,8 +376,9 @@ def readSeriesEvidence(file_path, data_directory, series_numbers):
                     series_number=series_number,
                     subject_id=str(subject_id),
                     n_epoch_groups=len(epoch_names),
-                    num_epochs=_scalar(_attr(group, 'num_epochs')),
-                    num_epochs_completed=_scalar(_attr(group, 'num_epochs_completed')),
+                    num_epochs=_scalar(h5io.firstPresent(group.attrs, h5io.NUM_TRIALS_ATTR_NAMES)),
+                    num_epochs_completed=_scalar(h5io.firstPresent(
+                        group.attrs, h5io.NUM_TRIALS_COMPLETED_ATTR_NAMES)),
                     run_status=_attr(group, 'run_status'),
                     run_start_unix=_scalar(_attr(group, 'run_start_unix_time')),
                     run_end_unix=_scalar(_attr(group, 'run_end_unix_time')),
@@ -477,18 +483,45 @@ def buildDaqOwnership(evidence, candidates, thresholds=None):
             prev_sn = ownership[daq_path][-1]
             prev, anchor = evidence[prev_sn], evidence[anchor_sn]
 
+            # Gate 1: the two runs are back to back in wall-clock time.
+            reasons = []
             turnaround = None
+            if ev.run_start_unix is None:
+                reasons.append('series {} has no run_start_unix_time'.format(sn))
+            if prev.run_end_unix is None:
+                reasons.append('series {} has no run_end_unix_time'.format(prev_sn))
             if ev.run_start_unix is not None and prev.run_end_unix is not None:
                 turnaround = ev.run_start_unix - prev.run_end_unix
             g1 = (turnaround is not None
                   and th['ENSEMBLE_TURNAROUND_MIN_S'] <= turnaround <= th['ENSEMBLE_TURNAROUND_MAX_S'])
+            if turnaround is not None and not g1:
+                reasons.append('turnaround {:.4f} s is outside [{:.1f}, {:.1f}] s'.format(
+                    turnaround, th['ENSEMBLE_TURNAROUND_MIN_S'], th['ENSEMBLE_TURNAROUND_MAX_S']))
 
+            # Gate 2: the DAQ file is long enough to hold both runs.
             duration = probes[daq_path]['duration_s']
             needed = None
+            # Name the real culprit rather than reporting a bare "capacity failed". A missing
+            # trial span almost always means the hdf5 uses a trial schema we did not recognise
+            # (stimpack renamed 'epochs' to 'trials' in 1.0.0), not a genuinely short DAQ file.
+            if anchor.first_epoch_unix is None:
+                reasons.append(
+                    'series {} has no trial start time ({} trial group(s) found)'.format(
+                        anchor_sn, anchor.n_epoch_groups))
+            if ev.last_epoch_end_unix is None:
+                reasons.append(
+                    'series {} has no trial end time ({} trial group(s) found)'.format(
+                        sn, ev.n_epoch_groups))
+            if duration is None:
+                reasons.append('could not measure the duration of {}'.format(
+                    os.path.basename(daq_path)))
             if (ev.last_epoch_end_unix is not None and anchor.first_epoch_unix is not None):
                 needed = ev.last_epoch_end_unix - anchor.first_epoch_unix
             g2 = (needed is not None and duration is not None
                   and needed <= duration + th['DAQ_CAPACITY_SLOP_S'])
+            if needed is not None and duration is not None and not g2:
+                reasons.append('would need {:.3f} s but {} is only {:.3f} s long'.format(
+                    needed, os.path.basename(daq_path), duration))
 
             if g1 and g2:
                 ownership[daq_path].append(sn)
@@ -497,11 +530,12 @@ def buildDaqOwnership(evidence, candidates, thresholds=None):
                     'Series {} joins {} (turnaround {:.4f} s <= {:.1f}; needs {:.3f} s of '
                     '{:.3f} s available).'.format(sn, os.path.basename(daq_path), turnaround,
                                                   th['ENSEMBLE_TURNAROUND_MAX_S'], needed, duration))
-            elif turnaround is not None:
-                notes.append(
-                    'Series {} does NOT join {}: turnaround {:.4f} s (gate {:.1f} s), '
-                    'capacity ok={}.'.format(sn, os.path.basename(daq_path), turnaround,
-                                             th['ENSEMBLE_TURNAROUND_MAX_S'], g2))
+            else:
+                # Always explain a non-join. This used to stay silent whenever the turnaround
+                # itself could not be computed, which is exactly the case that needs explaining.
+                notes.append('Series {} does NOT join {}: {}.'.format(
+                    sn, os.path.basename(daq_path),
+                    '; '.join(reasons) if reasons else 'gates not satisfied'))
 
         if not joined:
             open_anchor = None

@@ -18,6 +18,54 @@ SERIES_PARENT_GROUP_NAMES = ('epoch_runs', 'series')
 # Likewise, older files call the subject collection 'Flies' rather than 'Subjects'.
 SUBJECT_PARENT_GROUP_NAMES = ('Subjects', 'Flies')
 
+# Stimpack 1.0.0 also renamed the per-trial schema: the group holding one series' trials went
+# from 'epochs' to 'trials', its members from 'epoch_NNN' to 'trial_NNN', and the timing attrs
+# and counts followed. Both spellings are in the wild, sometimes on the same rig mid-migration,
+# so every accessor resolves the name rather than assuming one.
+TRIAL_PARENT_GROUP_NAMES = ('epochs', 'trials')
+TRIAL_START_ATTR_NAMES = ('epoch_unix_time', 'trial_unix_time')
+TRIAL_END_ATTR_NAMES = ('epoch_end_unix_time', 'trial_end_unix_time')
+TRIAL_TIME_ATTR_NAMES = ('epoch_time', 'trial_time')
+NUM_TRIALS_ATTR_NAMES = ('num_epochs', 'num_trials')
+NUM_TRIALS_COMPLETED_ATTR_NAMES = ('num_epochs_completed', 'num_trials_completed')
+
+
+def firstPresent(container, names, default=None):
+    """Value of the first name present in an hdf5 group or attrs mapping."""
+    for name in names:
+        if name in container:
+            return container[name]
+    return default
+
+
+def getTrialsGroupName(series_group):
+    """Name of the group holding a series' trials ('epochs', or newer 'trials')."""
+    for name in TRIAL_PARENT_GROUP_NAMES:
+        if name in series_group:
+            return name
+    return None
+
+
+def getTrialsGroup(series_group):
+    """Group holding a series' trials, under either naming scheme. None if absent."""
+    name = getTrialsGroupName(series_group)
+    return None if name is None else series_group[name]
+
+
+def getTrialStartUnixTime(trial_attrs, default=None):
+    """Trial start, from whichever attribute this stimpack version wrote."""
+    return firstPresent(trial_attrs, TRIAL_START_ATTR_NAMES, default)
+
+
+def getTrialEndUnixTime(trial_attrs, default=None):
+    """Trial end, from whichever attribute this stimpack version wrote."""
+    return firstPresent(trial_attrs, TRIAL_END_ATTR_NAMES, default)
+
+
+def getNumTrials(series_attrs, default=None):
+    """Parameterized trial count, from whichever attribute this version wrote."""
+    return firstPresent(series_attrs, NUM_TRIALS_ATTR_NAMES, default)
+
 
 def getSubjectParentName(experiment_file):
     """Name of the top-level group holding subjects ('Subjects', or legacy 'Flies')."""
@@ -115,7 +163,8 @@ def getHierarchy(file_path, additional_exclusions=None):
 
 def recursively_load_dict_contents_from_group(h5file, path, additional_exclusions=None):
     # https://codereview.stackexchange.com/questions/120802/recursively-save-python-dictionaries-to-hdf5-files-using-h5py
-    exclusions = ['acquisition', 'Client', 'epochs', 'stimulus_timing', 'roipath', 'subpath']
+    exclusions = ['acquisition', 'Client', 'epochs', 'trials', 'stimulus_timing',
+                  'subject_state_history', 'roipath', 'subpath']
     if additional_exclusions is not None:
         exclusions.append(additional_exclusions)
     ans = {}

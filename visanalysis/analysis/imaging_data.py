@@ -122,7 +122,14 @@ class ImagingDataObject:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
             epoch_run_group = experiment_file.visititems(find_partial)
             epoch_parameter = []
-            for epoch in epoch_run_group["epochs"].values():
+            # 'epochs' pre-1.0.0, 'trials' from stimpack 1.0.0 on.
+            trials_group = h5io.getTrialsGroup(epoch_run_group)
+            if trials_group is None:
+                raise KeyError(
+                    'Series {} has no trial group; expected one of {}. Found: {}'.format(
+                        self.series_number, h5io.TRIAL_PARENT_GROUP_NAMES,
+                        list(epoch_run_group.keys())))
+            for epoch in trials_group.values():
                 if param_key:
                     assert (
                         param_key in epoch.attrs
@@ -461,7 +468,7 @@ class ImagingDataObject:
                 ax.axhline(
                     y=run_parameters["stim_time"],
                     xmin=0,
-                    xmax=run_parameters["num_epochs"],
+                    xmax=h5io.getNumTrials(run_parameters, len(stim_durations)),
                     color="k",
                     linestyle="-",
                     marker="None",

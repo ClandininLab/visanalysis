@@ -97,7 +97,7 @@ class TwentyFourHourDataObject(ImagingDataObject):
         
         with h5py.File(self.file_path, 'r') as experiment_file:
             find_partial = functools.partial(h5io.find_series, sn=self.series_number)
-            epochs_group = experiment_file.visititems(find_partial)['epochs']
+            epochs_group = h5io.getTrialsGroup(experiment_file.visititems(find_partial))
             n_epochs = len(epochs_group)
             for e, epoch in enumerate(epochs_group.values()):
                 
@@ -106,8 +106,8 @@ class TwentyFourHourDataObject(ImagingDataObject):
                 tail_time = epoch_parameters[e]['tail_time']
                 
                 # Stimulus start time
-                if 'epoch_unix_time' in epoch.attrs:
-                    epoch_unix_time = epoch.attrs['epoch_unix_time']
+                if h5io.getTrialStartUnixTime(epoch.attrs) is not None:
+                    epoch_unix_time = h5io.getTrialStartUnixTime(epoch.attrs)
                 else:
                     # For older VP data when epoch_unix_time was not saved, get date and epoch_time and convert to unix time
                     date = experiment_file.attrs['date']
@@ -117,8 +117,8 @@ class TwentyFourHourDataObject(ImagingDataObject):
                 # stim_start_times.append(stim_start_time)
                 
                 # Stimulus end time
-                if 'epoch_end_unix_time' in epoch.attrs:
-                    epoch_end_unix_time = epoch.attrs['epoch_end_unix_time']
+                if h5io.getTrialEndUnixTime(epoch.attrs) is not None:
+                    epoch_end_unix_time = h5io.getTrialEndUnixTime(epoch.attrs)
                 else:
                     # For older VP data when epoch_end_unix_time was not saved, get stim_duration and add to epoch_unix_time
                     if 'stim_time' in epoch_parameters[e]:
@@ -128,7 +128,9 @@ class TwentyFourHourDataObject(ImagingDataObject):
                             stim_duration = stim_end_times[-1] # Use previous epoch end time as a proxy
                         else:
                             iti = epoch_parameters[e]['pre_time'] + epoch_parameters[e]['tail_time']
-                            stim_duration = epochs_group[f'epoch_{e+2:03d}'].attrs['epoch_unix_time'] - epoch_unix_time - iti
+                            next_name = sorted(epochs_group.keys())[e+1]
+                            stim_duration = h5io.getTrialStartUnixTime(
+                                epochs_group[next_name].attrs) - epoch_unix_time - iti
                     epoch_end_unix_time = stim_start_time + stim_duration + tail_time
                 stim_end_time = epoch_end_unix_time - tail_time
                 stim_end_times.append(stim_end_time)
